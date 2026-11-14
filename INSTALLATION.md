@@ -54,4 +54,9 @@ Restore only a verified runtime manifest with `scripts/Restore-Runtime.ps1`; it 
 
 ## Optional main-menu artwork
 
-Alpha.34 can install the matching own artwork archive with `-MenuArtworkDirectory <folder>`. Existing source-root `build/alpha/menu` output is selected automatically. Missing optional artwork retains the original menu; unknown supplied/retained archives are rejected. See [menu artwork](docs/MENU-ARTWORK.md) for local building, disabling and visual acceptance.
+The current alpha can install the matching own artwork archive with `-MenuArtworkDirectory <folder>`. Existing source-root `build/alpha/menu` output is selected automatically. Missing optional artwork retains the original menu; unknown supplied/retained archives are rejected. See [menu artwork](docs/MENU-ARTWORK.md) for local building, disabling and visual acceptance.
+
+
+## Optional existing renderer repair
+
+Obtain the original GD3D11 v17.9.7 archive separately. `scripts/Install-RendererRuntime.ps1 -GamePath <game> -ArchivePath <archive> -CheckOnly` checks every packaged file. Omit `-CheckOnly` to back up and restore differing files while Gothic is closed. Personal INI/JSON/XML settings are preserved. Use `scripts/Restore-RendererRuntime.ps1 -ManifestPath <manifest>` for the matching rollback. Renderer files are not part of the co-op gameplay content ID; verify them separately. Runtime file verification does not establish native visual acceptance.

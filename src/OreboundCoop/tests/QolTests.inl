@@ -31,7 +31,12 @@ void TestQolCompatibility(){
     for(unsigned body=0;body<32;++body){c.body=body;Check(q::CanLoot(c)==(body<=5||body==7),"only normal movement and swimming/dive body states may loot");}
     Check(!q::Due(1199,1100)&&q::Due(1220,1100),"fast-loot timer bounds per-frame work");
     Check(q::QuickItem(true,16,0,false)&&!q::QuickItem(true,16,0,true),"loose/chest armor may be looted but corpse armor stays");
-    Check(!q::QuickItem(true,1,1u<<12)&&!q::QuickItem(true,1,1u<<30)&&!q::QuickItem(false,1,0),"mission/equipped and native-ineligible items stay on safe path");
+    Check(q::QuickItem(true,1,1u<<12),"loose mission keys and stone tablets follow normal authoritative pickup");
+    Check(!q::QuickItem(true,1,1u<<30)&&!q::QuickItem(false,1,0),"equipped and native-ineligible items stay on safe path");
+    Check(q::Due(1220,1100)&&!q::Due(1100,1220),"fresh quickloot timestamp cannot underflow the rate limit");
+    c.body=0;Check(std::string(q::BlockReason(c)).empty(),"valid quickloot has no invented blocking reason");
+    c.weapon=1;Check(std::string(q::BlockReason(c))=="weapon_drawn","combat input blockage is diagnosable");c.weapon=0;
+    c.ready=false;Check(std::string(q::BlockReason(c))=="not_ready","checkpoint blockage is diagnosable");c.ready=true;
     for(unsigned sprint=0;sprint<=5;++sprint){
         co::Peer p;p.stats.attributes[1]=1;p.sprint=sprint;co::Peer out;
         Check(co::Decode(co::Encode(p),out)&&out.sprint==sprint,"all player sprint variants survive codec");

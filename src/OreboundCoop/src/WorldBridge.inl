@@ -179,7 +179,7 @@ bool WorldRecoveryEffect(const rc::Record& record,bool desired,bool& handled){
 }
 bool WorldHostRequest(rc::Message& m){
     if(m.tx.action!=rc::Action::GroundTake&&m.tx.action!=rc::Action::Drop)return false;
-    bool allowed=m.op==rc::Op::Request&&recoveryReady&&m.tx.hostTimeline==recoveryTimeline&&m.tx.world==CurrentWorld()&&haveTarget&&Now()-lastSnapshotAt<=1000;
+    bool allowed=m.op==rc::Op::Request&&recoveryReady&&m.tx.hostTimeline==recoveryTimeline&&m.tx.world==CurrentWorld()&&haveTarget&&timing::Elapsed(Now(),lastSnapshotAt)<=1000;
     allowed=allowed&&Distance2(zVEC3(m.tx.source.position[0],m.tx.source.position[1],m.tx.source.position[2]),zVEC3(target.x,target.y,target.z))<250000;
     if(m.tx.action==rc::Action::GroundTake){auto* item=WorldGroundFor(m.tx);allowed=allowed&&item&&item->amount>=static_cast<int>(m.tx.amount);}
     else allowed=allowed&&m.tx.source.name=="ZK_DROP_"+m.tx.id;
@@ -301,30 +301,30 @@ void WorldReceive(const std::vector<std::uint8_t>& bytes){
 }
 void WorldFrame(unsigned long long now){
     if(!CombatConnected())return;if(!worldConnectedAt)worldConnectedAt=now;
-    if(now-lastWorldScan>=500){lastWorldScan=now;auto* world=ogame->GetGameWorld();if(world->voblist_items)for(auto* it=world->voblist_items->GetNextInList();it;it=it->GetNextInList())RegisterGround(it->GetData());}
+    if(timing::Elapsed(now,lastWorldScan)>=500){lastWorldScan=now;auto* world=ogame->GetGameWorld();if(world->voblist_items)for(auto* it=world->voblist_items->GetNextInList();it;it=it->GetNextInList())RegisterGround(it->GetData());}
     if(HostCombat()){
         for(auto& npc:npcBindings){const bool pause=WorldTradePaused(npc->npc);if(pause||npc->pausedByPeer){auto* model=zDYNAMIC_CAST<zCModel>(npc->npc->GetVisual());if(model){if(!npc->modelDefaultsCaptured){npc->rootScale=model->aniTransScale;npc->originalRotation=model->doVobRot;npc->modelDefaultsCaptured=true;}model->aniTransScale=pause?zVEC3(0,0,0):npc->rootScale;}npc->pausedByPeer=pause;}}
-        if(now-lastWorldSend>=200){lastWorldSend=now;unsigned sent=0;std::size_t visited=0;
+        if(timing::Elapsed(now,lastWorldSend)>=200){lastWorldSend=now;unsigned sent=0;std::size_t visited=0;
             while(!groundBindings.empty()&&visited++<groundBindings.size()&&sent<16&&lootOutbox.size()<80){auto& e=*groundBindings[(groundCursor++)%groundBindings.size()];auto& g=e.state;
                 const bool present=e.item->homeWorld==ogame->GetWorld()&&e.item->amount>0;
                 const bool changed=present!=g.present||(present&&e.item->amount!=static_cast<int>(g.amount));
                 if(present){const auto p=e.item->GetPositionWorld();g.position={p[0],p[1],p[2]};g.amount=e.item->amount;}g.present=present;
                 const bool nearby=haveTarget&&ws::Within(g.position,{target.x,target.y,target.z},8000);
                 const bool moved=!ws::Within(g.position,e.sentPosition,1);
-                if(!changed&&(!nearby||(e.lastSent&&now-e.lastSent<10000&&!moved)))continue;
+                if(!changed&&(!nearby||(e.lastSent&&timing::Elapsed(now,e.lastSent)<10000&&!moved)))continue;
                 g.name=e.item->GetObjectName().ToChar();if(g.name.size()>63)g.name.clear();g.revision=++combatRevision;e.lastSent=now;e.sentPosition=g.position;QueueWorld(ws::Encode(g));++sent;
             }
         }
-    }else if(now-worldConnectedAt>2000&&now-lastWorldSend>=250){
+    }else if(timing::Elapsed(now,worldConnectedAt)>2000&&timing::Elapsed(now,lastWorldSend)>=250){
         lastWorldSend=now;int groundSent=0;for(auto& e:groundBindings){if(e->bound||e->probed||!e->item->homeWorld||!ws::Within(e->state.position,{player->GetPositionWorld()[0],player->GetPositionWorld()[1],player->GetPositionWorld()[2]},8000))continue;e->probed=true;auto probe=e->state;probe.id=static_cast<unsigned>(groundSent+1);probe.revision=1;auto b=ws::Encode(probe);b[0]=50;QueueWorld(std::move(b));if(++groundSent>=4)break;}
         int sent=0;for(auto& e:npcBindings){if(e->mirror||e->owned||CharacterLocal(e->npc)||Distance2(e->anchor,player->GetPositionWorld())>64000000.0f)continue;
-            const auto key=std::to_string(e->npc->GetInstance())+":"+std::to_string(e->anchor[0])+":"+std::to_string(e->anchor[2]);if(npcProbes.count(key)&&now-npcProbes[key]<5000)continue;
+            const auto key=std::to_string(e->npc->GetInstance())+":"+std::to_string(e->anchor[0])+":"+std::to_string(e->anchor[2]);if(npcProbes.count(key)&&timing::Elapsed(now,npcProbes[key])<5000)continue;
             npcProbes[key]=now;if(e->probeCookie)npcProbeTargets.erase(e->probeCookie);if(npcProbeSerial>=999999){combatFailure="NPC probe sequence exhausted";break;}const auto serial=++npcProbeSerial;e->probeCookie=serial;npcProbeTargets[serial]=e.get();co::Npc probe;probe.id=serial;probe.instance=e->npc->GetInstance();probe.anchor={e->anchor[0],e->anchor[1],e->anchor[2]};probe.stats=ReadCombatStats(e->npc);auto b=co::Encode(probe);b[0]=49;QueueWorld(std::move(b));if(++sent>=4)break;
         }
     }
     for(int i=0;i<8&&!worldOutbox.empty()&&lootOutbox.size()<48;++i){lootOutbox.push_back(std::move(worldOutbox.front()));worldOutbox.pop_front();}
     if(!worldGroundPending.empty()){const auto* r=recoveryStore.Find(worldGroundPending);if(r&&r->tx.decision!=rc::Decision::Prepared)worldGroundPending.clear();}
-    if(now-lastWorldLog>=2000){lastWorldLog=now;unsigned active=0,owned=0,removed=0;for(auto& e:npcBindings){if(e->npc->homeWorld)++active;if(e->owned)++owned;if(e->life==3)++removed;}
+    if(timing::Elapsed(now,lastWorldLog)>=2000){lastWorldLog=now;unsigned active=0,owned=0,removed=0;for(auto& e:npcBindings){if(e->npc->homeWorld)++active;if(e->owned)++owned;if(e->life==3)++removed;}
         LootLog("world_sync","npcs="+std::to_string(npcBindings.size())+" active="+std::to_string(active)+" clones="+std::to_string(owned)+" removed="+std::to_string(removed)+" ground="+std::to_string(groundBindings.size())+" dual_passes="+std::to_string(worldDualPasses)+" timers_restored="+std::to_string(worldTimersRestored)+" guest_ai_ticks="+std::to_string(worldGuestTicks)+" spawn_queue="+std::to_string(ogame->spawnman?ogame->spawnman->spawnList.GetNumInList():0)+" world_outbox="+std::to_string(worldOutbox.size())+" outbox="+std::to_string(lootOutbox.size())+" player_separation="+(haveTarget?std::to_string(std::sqrt(Distance2(player->GetPositionWorld(),zVEC3(target.x,target.y,target.z)))):"unknown"));
     }
 }

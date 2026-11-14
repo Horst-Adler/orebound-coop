@@ -345,6 +345,7 @@ void TestKeyboardLayout() {
 #include "WorldTests.inl"
 #include "SessionTests.inl"
 #include "QolTests.inl"
+#include "TimingTests.inl"
 int main(int argc,char** argv) {
     const bool headless=argc==2&&std::strcmp(argv[1],"--headless")==0;
     if(argc>2||(argc==2&&!headless)){
@@ -386,6 +387,8 @@ int main(int argc,char** argv) {
         TestLocalDropRecovery();
         TestLegacyRecoveryMigration();
         TestQolCompatibility();
+        TestFrameTiming();
+        TestBackgroundReadiness();
         TestSessionReadiness();
         TestSaveTransport();
         TestSaveAnnouncementLoss();

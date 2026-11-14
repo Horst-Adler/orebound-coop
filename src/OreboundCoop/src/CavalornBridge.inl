@@ -77,7 +77,7 @@ bool QuestRecoveryEffect(const rc::Record& record,bool desired,bool& handled){
 }
 bool QuestPartyReady(){
     const unsigned required=session::Checkpoint|session::Rules|session::Actor|session::Quest;
-    return CombatConnected()&&HostCombat()&&QuestSupported()&&questError.empty()&&recoveryReady&&recoveryError.empty()&&!recoveryBlocked&&!lootLedger.HasUnapplied()&&cv::EligibleForCredit(player->attribute[0],player->IsUnconscious()!=FALSE)&&rulesReady&&remote&&haveTarget&&Now()-lastSnapshotAt<=2000&&havePeerReadiness&&(peerReadiness.flags&required)==required&&!(peerReadiness.flags&(session::Blocked|session::Pending|session::Incapacitated))&&!peerReadiness.timeline.empty();
+    return CombatConnected()&&HostCombat()&&QuestSupported()&&questError.empty()&&recoveryReady&&recoveryError.empty()&&!recoveryBlocked&&!lootLedger.HasUnapplied()&&cv::EligibleForCredit(player->attribute[0],player->IsUnconscious()!=FALSE)&&rulesReady&&remote&&haveTarget&&timing::Elapsed(Now(),lastSnapshotAt)<=2000&&havePeerReadiness&&(peerReadiness.flags&required)==required&&!(peerReadiness.flags&(session::Blocked|session::Pending|session::Incapacitated))&&!peerReadiness.timeline.empty();
 }
 void QuestUpdateConditions(){
     if(!QuestSupported()){QuestRestoreConditions();return;}
@@ -169,14 +169,14 @@ void QuestFrame(unsigned long long now){
     QuestUpdateConditions();
     if(!CombatConnected()||!QuestSupported()||!recoveryReady||recoveryBlocked||!recoveryError.empty()||!questError.empty()||!havePeerReadiness||!(peerReadiness.flags&session::Checkpoint)||peerReadiness.timeline.empty())return;
     if(!HostCombat())return;
-    if(questStateKey.empty()||now-questLastSample>=250){
+    if(questStateKey.empty()||timing::Elapsed(now,questLastSample)>=250){
         questLastSample=now;auto state=QuestState();auto key=std::to_string(state.mission)+","+std::to_string(state.letter)+","+std::to_string(state.told)+","+std::to_string(state.dead)+","+std::to_string(state.away);
-        if(key!=questStateKey||now-questLastState>=3000){state.revision=++questRevision;auto bytes=session::Encode(state);if(lootOutbox.size()<96){lootOutbox.push_back(std::move(bytes));questStateKey=key;questLastState=now;}}
+        if(key!=questStateKey||timing::Elapsed(now,questLastState)>=3000){state.revision=++questRevision;auto bytes=session::Encode(state);if(lootOutbox.size()<96){lootOutbox.push_back(std::move(bytes));questStateKey=key;questLastState=now;}}
     }
     if(!(peerReadiness.flags&session::Quest)||(peerReadiness.flags&session::Blocked))return;
     unsigned sent=0;for(const auto& pair:recoveryStore.Records()){
         const auto& record=pair.second;const auto& tx=record.tx;
-        if(record.role!=rc::Role::Host||tx.source.kind!=lo::Source::Quest||tx.hostTimeline!=recoveryTimeline||tx.ownerTimeline!=peerReadiness.timeline||questReceipts.count(tx.id)||now-questLastReward[tx.id]<2000)continue;
+        if(record.role!=rc::Role::Host||tx.source.kind!=lo::Source::Quest||tx.hostTimeline!=recoveryTimeline||tx.ownerTimeline!=peerReadiness.timeline||questReceipts.count(tx.id)||timing::Elapsed(now,questLastReward[tx.id])<2000)continue;
         if(!recoveryEffects.count(tx.id))continue;
         rc::Message m;m.op=rc::Op::Result;m.tx=tx;m.request=NextLootRequest();QueueRecovery(m);questLastReward[tx.id]=now;if(++sent>=4)break;
     }

@@ -66,10 +66,10 @@ void SessionFrame(unsigned long long now){
     localReadiness=SessionLocalReady();
     if(!CombatConnected())return;
     const auto key=localReadiness.timeline+":"+std::to_string(localReadiness.flags);
-    if((key!=lastReadinessKey||now-lastReadiness>=3000)&&lootOutbox.size()<96){localReadiness.revision=++readinessRevision;lootOutbox.push_back(session::Encode(localReadiness));lastReadinessKey=key;lastReadiness=now;}
-    const auto reason=session::Readiness(localReadiness,havePeerReadiness?&peerReadiness:nullptr,haveTarget&&now-lastSnapshotAt<=2000);
+    if((key!=lastReadinessKey||timing::Elapsed(now,lastReadiness)>=3000)&&lootOutbox.size()<96){localReadiness.revision=++readinessRevision;lootOutbox.push_back(session::Encode(localReadiness));lastReadinessKey=key;lastReadiness=now;}
+    const auto reason=session::Readiness(localReadiness,havePeerReadiness?&peerReadiness:nullptr,haveTarget&&timing::Elapsed(now,lastSnapshotAt)<=2000);
     const auto text=std::string(session::Text(reason));
-    if(text!=lastReadinessText||now-lastReadinessLog>=5000){
+    if(text!=lastReadinessText||timing::Elapsed(now,lastReadinessLog)>=5000){
         LootLog("coop_readiness","status="+text+" local_flags="+std::to_string(localReadiness.flags)+" peer_flags="+std::to_string(havePeerReadiness?peerReadiness.flags:0)+" quickloot_batch="+std::to_string(clientQuickLoot)+" sprint_local="+std::to_string(QolSprint(player))+" sprint_peer="+std::to_string(peerCombat.sprint)+" pending="+std::to_string(network.PendingEvents())+" source_queue="+std::to_string(lootOutbox.size())+" recovery="+recoveryError+" quest="+questError);
         lastReadinessText=text;lastReadinessLog=now;
     }
@@ -77,10 +77,10 @@ void SessionFrame(unsigned long long now){
 std::vector<std::string> SessionStatusLines(){
     std::vector<std::string> lines;
     if(!CombatConnected()){lines.push_back(Ui("ui_91b5e7f2b0cb"));return lines;}
-    const auto now=Now();const auto reason=session::Readiness(localReadiness,havePeerReadiness?&peerReadiness:nullptr,haveTarget&&now-lastSnapshotAt<=2000);
+    const auto now=Now();const auto reason=session::Readiness(localReadiness,havePeerReadiness?&peerReadiness:nullptr,haveTarget&&timing::Elapsed(now,lastSnapshotAt)<=2000);
     lines.push_back(network.PeerSaving()?Ui("ui_f2a36e1215cb"):session::Text(reason));
     if(!diagnosticOverlay)return lines;
-    lines.push_back(Ui("ui_599af28935be")+std::to_string(net::ProtocolVersion)+Ui("ui_e46b1aa110bb")+CurrentWorld()+Ui("ui_272347b4647d")+(haveTarget?std::to_string(now-lastSnapshotAt)+" ms":Ui("state.missing"))+Ui("ui_00bc75791916")+std::to_string(network.PendingEvents()+lootOutbox.size()+worldOutbox.size()+QuestPendingAwards()));
+    lines.push_back(Ui("ui_599af28935be")+std::to_string(net::ProtocolVersion)+Ui("ui_e46b1aa110bb")+CurrentWorld()+Ui("ui_272347b4647d")+(haveTarget?std::to_string(timing::Elapsed(now,lastSnapshotAt))+" ms":Ui("state.missing"))+Ui("ui_00bc75791916")+std::to_string(network.PendingEvents()+lootOutbox.size()+worldOutbox.size()+QuestPendingAwards()));
     lines.push_back(Ui("ui_2544ff2159e2")+(haveTarget?std::to_string(static_cast<int>(std::sqrt(Distance2(player->GetPositionWorld(),zVEC3(target.x,target.y,target.z)))/100))+" m":"?")+Ui("ui_505e820fc14c")+std::to_string(QuestInt("MIS_ADDON_CAVALORN_KILLBRAGO"))+Ui("ui_b3a09d419b63")+session::Step(markerStep));
     if(!recoveryError.empty())lines.push_back(Ui("ui_fde1c73c5052")+recoveryError.substr(0,90));else if(recoveryBlocked)lines.push_back(Ui("ui_90ae9caedb1a"));
     if(!questError.empty())lines.push_back(Ui("ui_d75cba87a1b4")+questError.substr(0,90));

@@ -1,6 +1,7 @@
 // Ninja Quickloot's unguarded CreateInvItems path is bypassed in a coop session.
 // Native engine access remains on the main thread; all guest credits use recovery.
 unsigned long long qolLastLoot=0;
+unsigned long long qolLastInputLog=0;bool qolKeyHeld=false;
 std::deque<std::pair<unsigned long long,std::string>> qolMessages;
 qol::SessionLatch qolLatch;bool qolWasGuest=false;
 void QolGuard(bool active){
@@ -8,7 +9,7 @@ void QolGuard(bool active){
     QuestSetInt("ZK_COOP_QOL_ACTIVE",block?1:0);QuestSetInt("ZK_COOP_QOL_GUEST",block&&qolWasGuest?1:0);
     if(!active)qolMessages.clear();
 }
-void QolReset(){qolLatch.Reset();qolWasGuest=false;qolLastLoot=0;QolGuard(false);}
+void QolReset(){qolLatch.Reset();qolWasGuest=false;qolLastLoot=qolLastInputLog=0;qolKeyHeld=false;QolGuard(false);}
 void QolNotify(unsigned instance,unsigned amount){
     if(!player||!parser)return;QuestBindings bindings;std::string label=Ui("item.generic");
     if(auto* item=player->IsInInv(static_cast<int>(instance),1))label=item->description.Length()?item->description.ToChar():item->name.ToChar();
@@ -59,10 +60,21 @@ void QolFrame(unsigned long long now){
     const bool session=network.GetState()!=net::State::Idle&&network.GetState()!=net::State::Error;
     QolGuard(session);
     if(!ExtensionEnabled(extensions::Module::Quickloot)||!CombatConnected()||!player||!zinput)return;
-    const qol::Context context{true,recoveryReady&&RecoveryCanLoot()&&(HostCombat()||rulesReady)&&haveTarget&&now-lastSnapshotAt<=2000,
+    const int key=QuestInt("_NINJA_QUICKLOOT_LOOTKEY",MOUSE_BUTTONRIGHT);
+    const bool pressed=key>=0&&key<=4096&&zinput->KeyPressed(key);
+    const bool traceInput=pressed&&(!qolKeyHeld||timing::Elapsed(now,qolLastInputLog)>=1000);
+    qolKeyHeld=pressed;
+    const qol::Context context{true,recoveryReady&&RecoveryCanLoot()&&(HostCombat()||rulesReady)&&haveTarget&&timing::Elapsed(now,lastSnapshotAt)<=2000,
         zCMenu::GetActive()!=nullptr,player->talkOther!=nullptr,player->inventory2.IsOpen()!=FALSE,
         player->interactMob!=nullptr,player->attribute[0]>0&&player->IsUnconscious()==FALSE,
         static_cast<unsigned>(player->GetWeaponMode()),static_cast<unsigned>(player->GetBodyState())};
+    if(traceInput){
+        qolLastInputLog=now;auto* focus=player->GetFocusVob();
+        std::string reason=qol::BlockReason(context);
+        if(reason.empty()&&clientLootSource.vob)reason="source_active";
+        if(reason.empty()&&!worldGroundPending.empty())reason="ground_transfer_pending";
+        LootLog("quickloot_input","key="+std::to_string(key)+" ready="+std::to_string(context.ready)+" weapon="+std::to_string(context.weapon)+" body="+std::to_string(context.body)+" blocked="+(reason.empty()?"none":reason)+" target="+(focus?std::string(focus->GetObjectName().ToChar()):"none"));
+    }
     if(clientQuickLoot){
         if(!qol::CanLoot(context)||!clientLootSource.vob||clientLootSource.vob->homeWorld!=ogame->GetWorld()||Distance2(clientLootSource.vob->GetPositionWorld(),player->GetPositionWorld())>250000){clientLootClosing=true;return;}
         if(clientLootClosing||clientOpenRequest&&!clientLootShown||clientPendingTake||!qol::Due(now,qolLastLoot))return;
@@ -74,13 +86,12 @@ void QolFrame(unsigned long long now){
         clientLootClosing=true;player->SetFocusVob(nullptr);notice=Ui("ui_3e4a0b665fae");return;
     }
     if(!qol::CanLoot(context)||!qol::Due(now,qolLastLoot)||clientLootSource.vob||!worldGroundPending.empty())return;
-    const int key=QuestInt("_NINJA_QUICKLOOT_LOOTKEY",MOUSE_BUTTONRIGHT);
-    if(key<0||key>4096||!zinput->KeyPressed(key))return;
+    if(!pressed)return;
     if(!player->GetFocusVob())player->CollectFocusVob(TRUE);
-    auto* focus=player->GetFocusVob();if(!focus||Distance2(focus->GetPositionWorld(),player->GetPositionWorld())>250000)return;
+    auto* focus=player->GetFocusVob();if(!focus||Distance2(focus->GetPositionWorld(),player->GetPositionWorld())>250000){if(traceInput)LootLog("quickloot_reject",focus?"reason=range":"reason=no_focus");return;}
     qolLastLoot=now;
     if(auto* item=zDYNAMIC_CAST<oCItem>(focus)){
-        if(!QolItem(item)||item->homeWorld!=ogame->GetWorld())return;
+        if(!QolItem(item)||item->homeWorld!=ogame->GetWorld()){if(traceInput)LootLog("quickloot_reject","reason=item_not_eligible instance="+std::to_string(item->GetInstance())+" flags="+std::to_string(item->flags)+" mainflag="+std::to_string(item->mainflag));return;}
         qol::Hold<oCItem> held(item);
         try{
             if(HostCombat()){

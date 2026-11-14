@@ -37,6 +37,12 @@ enum class CounterOp:std::uint32_t {Hello=0,Delta=1,Snapshot=2,Receipt=3};
 struct CounterMessage {CounterOp op=CounterOp::Hello;std::uint32_t revision=0,ack=0;std::string timeline;Counters values{};};
 inline combat::Bytes Encode(const CounterMessage& m){combat::Writer w;w.data.push_back(70);w.u(static_cast<unsigned>(m.op));w.u(m.revision);w.u(m.ack);w.text(m.timeline);for(int n:m.values)w.i(n);return w.data;}
 inline bool Decode(const combat::Bytes& bytes,CounterMessage& m){if(bytes.empty()||bytes[0]!=70)return false;combat::Reader r{bytes};const auto op=r.u();m.op=static_cast<CounterOp>(op);m.revision=r.u();m.ack=r.u();m.timeline=r.text();for(int& n:m.values)n=r.i();if(op>3||m.timeline.size()!=32||!r.done())return false;for(unsigned char c:m.timeline)if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;if(m.op==CounterOp::Delta){if(!m.ack)return false;for(int n:m.values)if(n< -1000000||n>1000000)return false;return true;}return ValidCounters(m.values);}
+inline bool BlockingOutbound(const combat::Bytes& bytes){
+    CounterMessage message;
+    // Periodic snapshots/receipts do not introduce a new local mutation.
+    // Unacknowledged state changes are guarded by revision/pending state.
+    return !Decode(bytes,message)||(message.op!=CounterOp::Snapshot&&message.op!=CounterOp::Receipt);
+}
 inline bool IsSummonSpell(unsigned spell){switch(spell){case 22:case 25:case 31:case 35:case 40:case 45:case 84:case 88:return true;default:return false;}}
 struct Summon {unsigned spell=0;std::string token;};
 inline combat::Bytes Encode(const Summon& s){combat::Writer w;w.data.push_back(71);w.u(s.spell);w.text(s.token);return w.data;}

@@ -12,6 +12,7 @@ std::deque<co::Bytes> lootOutbox;
 std::map<std::uint32_t,lo::Message> lootApplied;
 std::uint32_t lootRequest=0,clientOpenRequest=0,clientLease=0,clientLootRevision=0,clientPendingTake=0;
 unsigned long long lootClientWait=0,lootLastKeepAlive=0,lootLastTraffic=0;
+unsigned lootClockSkews=0;
 bool lootNativeBypass=false,clientLootShown=false,clientLootClosing=false;
 bool clientQuickLoot=false;
 
@@ -98,7 +99,7 @@ void ClearClientLoot(){CloseClientLootUI();ReleaseLootItems(clientLootItems);Rel
 void LootReset(){
     RecoverySessionReset();
     if(clientPendingTake||lootLedger.HasUnapplied())LootLog("loot_recovery_pending","Session ended with transfer in flight; durable transaction decision and save checkpoint will be reconciled on resume.");
-    ClearClientLoot();ReleaseLootItems(guestLootItems);ReleaseLootSource(guestLootSource);lootLedger=lo::Ledger{};lootOutbox.clear();lootApplied.clear();lootRequest=0;lootLastKeepAlive=lootLastTraffic=0;
+    ClearClientLoot();ReleaseLootItems(guestLootItems);ReleaseLootSource(guestLootSource);lootLedger=lo::Ledger{};lootOutbox.clear();lootApplied.clear();lootRequest=0;lootLastKeepAlive=lootLastTraffic=0;lootClockSkews=0;
 }
 lo::Identity LootIdentity(oCNpc* npc){
     lo::Identity id;id.kind=lo::Source::Corpse;const auto found=npcByPointer.find(npc);if(found!=npcByPointer.end())id.npc=found->second->id;return id;
@@ -141,7 +142,7 @@ lo::Status ResolveHostLoot(const lo::Identity& id,LootSource& source){
         if(matches!=1)return lo::Status::Missing;if(source.chest->locked)return lo::Status::Locked;
     }
     if(!source.vob||source.vob==PartnerNpc()||source.vob==player||source.vob->homeWorld!=ogame->GetWorld())return lo::Status::BadRequest;
-    if(!haveTarget||Now()-lastSnapshotAt>1000||Distance2(source.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return lo::Status::Range;
+    if(!haveTarget||timing::Elapsed(Now(),lastSnapshotAt)>1000||Distance2(source.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return lo::Status::Range;
     if(LootUIOpen(source))return lo::Status::Busy;
     return lo::Status::Ok;
 }
@@ -210,7 +211,7 @@ void LootReceive(const std::vector<std::uint8_t>& bytes){
         case lo::Op::QuickOpen:case lo::Op::Open:OpenHostLoot(m);return;
         case lo::Op::Take:{
             auto result=lootLedger.Take(m,[&](const lo::Entry& item,std::uint32_t amount){
-                if(!guestLootSource.vob||item.token>guestLootItems.size()||!haveTarget||Now()-lastSnapshotAt>1000||Distance2(guestLootSource.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return false;
+                if(!guestLootSource.vob||item.token>guestLootItems.size()||!haveTarget||timing::Elapsed(Now(),lastSnapshotAt)>1000||Distance2(guestLootSource.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return false;
                 if(guestLootSource.vob->homeWorld!=ogame->GetWorld()||!havePeerCombat||peerCombat.stats.attributes[0]<=0||(guestLootSource.corpse&&!guestLootSource.corpse->IsDead()&&!guestLootSource.corpse->IsUnconscious())||(guestLootSource.chest&&guestLootSource.chest->locked))return false;
                 auto& native=guestLootItems[item.token-1];if(native.entry.instance!=item.instance||native.item->amount!=static_cast<int>(item.amount))return false;
                 if(!LootJournal("host_prepare",m))return false;
@@ -255,10 +256,16 @@ void LootFrame(unsigned long long now){
     if(!CombatConnected())return;
     if(!HostCombat()&&clientLootSource.vob){
         if(clientLootShown&&!clientQuickLoot&&!LootUIOpen(clientLootSource))clientLootClosing=true;
-        if(lootClientWait&&now-lootClientWait>10000){combatFailure="Loot operation timed out; inspect inventory journal before retry";return;}
+        if(lootClientWait&&timing::Elapsed(now,lootClientWait)>10000){combatFailure="Loot operation timed out; inspect inventory journal before retry";return;}
         if(clientLootClosing&&!clientPendingTake&&clientLease){lo::Message close;close.op=lo::Op::Close;close.request=NextLootRequest();close.lease=clientLease;QueueLoot(close);ClearClientLoot();}
-        else if(clientLease&&now-lootLastKeepAlive>=1000){lootLastKeepAlive=now;lo::Message keep;keep.op=lo::Op::KeepAlive;keep.request=NextLootRequest();keep.lease=clientLease;QueueLoot(keep);}
+        else if(clientLease&&timing::Elapsed(now,lootLastKeepAlive)>=1000){lootLastKeepAlive=now;lo::Message keep;keep.op=lo::Op::KeepAlive;keep.request=NextLootRequest();keep.lease=clientLease;QueueLoot(keep);}
     }
-    if(HostCombat()&&lootLedger.Lease()&&now-lootLastTraffic>15000){combatFailure="Guest loot lease timed out; no automatic item rollback";return;}
+    if(HostCombat()&&lootLedger.Lease()){
+        if(now<lootLastTraffic&&lootClockSkews++<3)diagnostics.Write(2,"loot_clock_sample","frame="+std::to_string(now)+" traffic="+std::to_string(lootLastTraffic)+" age_ms=0 clamped=1 lease="+std::to_string(lootLedger.Lease()));
+        if(timing::Expired(now,lootLastTraffic,15000)){
+            LootLog("loot_timeout","kind=host_lease frame="+std::to_string(now)+" traffic="+std::to_string(lootLastTraffic)+" age_ms="+std::to_string(timing::Elapsed(now,lootLastTraffic))+" lease="+std::to_string(lootLedger.Lease())+" unapplied="+std::to_string(lootLedger.HasUnapplied()));
+            combatFailure="Guest loot lease timed out; no automatic item rollback";return;
+        }
+    }
     for(int i=0;i<8&&!lootOutbox.empty()&&network.PendingEvents()<48;++i){if(!network.SendEvent(lootOutbox.front(),now)){combatFailure="Loot reliable channel unavailable";break;}lootOutbox.pop_front();}
 }

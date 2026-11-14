@@ -4,6 +4,9 @@
 #include <type_traits>
 #include <limits>
 namespace orebound::worldsync {
+template<class Position> bool CaptureSpawnAnchor(Position& anchor,bool& fixed,const Position& spawn){
+    if(fixed)return false;anchor=spawn;fixed=true;return true;
+}
 inline int MatchGround(const std::vector<float>& distances,bool tagged=false){
     if(tagged)return distances.size()==1&&std::isfinite(distances[0])?0:-1;
     int best=-1;float first=(std::numeric_limits<float>::infinity)(),second=first;

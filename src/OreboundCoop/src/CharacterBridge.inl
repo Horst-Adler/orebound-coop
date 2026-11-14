@@ -29,7 +29,7 @@ const char* characterCounterNames[ch::CounterCount]={
 bool CharacterLocal(oCNpc* npc){return npc&&(npc==player||std::find(characterForms.begin(),characterForms.end(),npc)!=characterForms.end());}
 bool CharacterReady(){return !CombatConnected()||characterReady;}
 bool CharacterFormSwitch(){return characterChangingForm;}
-bool CharacterBusy(){return CombatConnected()&&(!characterReady||!characterOutbox.empty()||!characterArchive.pending.empty()||!characterPendingRelations.empty()||(HostCombat()?characterReceipt!=characterArchive.guest.revision:CharacterCounters()!=characterObserved));}
+bool CharacterBusy(){return CombatConnected()&&(!characterReady||std::any_of(characterOutbox.begin(),characterOutbox.end(),ch::BlockingOutbound)||!characterArchive.pending.empty()||!characterPendingRelations.empty()||(HostCombat()?characterReceipt!=characterArchive.guest.revision:CharacterCounters()!=characterObserved));}
 void CharacterPruneForms(){for(auto it=characterForms.begin();it!=characterForms.end();){auto* n=*it;if(n!=player&&n!=characterHumanRoot&&!n->homeWorld){n->Release();it=characterForms.erase(it);}else ++it;}}
 void CharacterHoldForm(oCNpc* npc){
     if(!npc||npc==PartnerNpc())return;
@@ -222,7 +222,7 @@ void CharacterReceive(const co::Bytes& bytes){
         }
         if(bytes.size()&&bytes[0]==71){CharacterReceiveSummon(bytes);return;}
         ch::RelationUpdate relation;if(ch::Decode(bytes,relation)&&HostCombat()&&characterReady&&PartnerNpc()){
-            auto entry=npcById.find(relation.npc);if(entry==npcById.end()||!haveTarget||Now()-lastSnapshotAt>2000||Distance2(entry->second->npc->GetPositionWorld(),PartnerNpc()->GetPositionWorld())>2250000)throw std::runtime_error("Personal relation does not belong to guest dialogue range");
+            auto entry=npcById.find(relation.npc);if(entry==npcById.end()||!haveTarget||timing::Elapsed(Now(),lastSnapshotAt)>2000||Distance2(entry->second->npc->GetPositionWorld(),PartnerNpc()->GetPositionWorld())>2250000)throw std::runtime_error("Personal relation does not belong to guest dialogue range");
             auto& value=CharacterRelation(entry->second->npc);if(relation.permanent)value.permanent=relation.value;else value.temporary=relation.value;characterLastSend=0;
             CombatLog("crime_relation_owner","npc="+std::to_string(relation.npc)+" value="+std::to_string(relation.value));return;
         }
@@ -245,7 +245,7 @@ void CharacterFrame(unsigned long long now){
                 if(ch::Changed(delta)){if(characterArchive.pending.size()>=64||characterArchive.ownerSequence==UINT32_MAX)throw std::runtime_error("Personal counter pending limit");characterArchive.pending.emplace(++characterArchive.ownerSequence,delta);characterObserved=values;}
                 for(const auto& pending:characterArchive.pending)if(pending.first>characterLastDeltaSent){ch::CounterMessage update;update.op=ch::CounterOp::Delta;update.timeline=recoveryTimeline;update.ack=pending.first;update.values=pending.second;CharacterQueue(ch::Encode(update));characterLastDeltaSent=pending.first;}
             }
-        }else if(characterReady&&(!characterLastSend||now-characterLastSend>=1000)){
+        }else if(characterReady&&(!characterLastSend||timing::Elapsed(now,characterLastSend)>=1000)){
             ch::CounterMessage snapshot;snapshot.op=ch::CounterOp::Snapshot;snapshot.timeline=characterArchive.guestLineage;snapshot.revision=characterArchive.guest.revision;snapshot.ack=characterArchive.guest.ownerAck;snapshot.values=characterArchive.guest.values;CharacterQueue(ch::Encode(snapshot));characterLastSend=now;
         }
     }catch(const std::exception& e){combatFailure=e.what();}

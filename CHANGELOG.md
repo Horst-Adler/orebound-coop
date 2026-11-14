@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.36 — 2026-11-14
+
+- Fix immediate loot-lease timeout when journal callbacks publish newer timestamps than the frame clock; retain real expiry and add timestamp diagnostics.
+- Allow authoritative Quickloot of mission keys/tablets; report input, target and blocking reasons.
+- Stop unchanged character snapshots from flickering inventory readiness; retain pending-mutation guards.
+- Keep captured NPC spawn anchors stable through culling and improve ambiguous-mapping diagnostics.
+- Add optional pinned-renderer repair/rollback tools with backup and configuration preservation.
+- 4,775 technical assertions pass. Container/recovery and host Quickloot need native retesting; the preceding shared route stopped in the tower.
+
 ## 0.1.0-alpha.35 — 2026-11-14
 
 - Correct Ninja discovery: use OreboundCore.vdf, a matching Ninja/OreboundCore directory and uppercase native VDFS catalogue entries. Retain existing script symbols and migrate the previous archive after backup.

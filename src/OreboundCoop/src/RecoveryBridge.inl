@@ -204,7 +204,7 @@ void RecoveryResult(const rc::Message& m){
 bool RecoveryValidateHostRequest(const rc::Message& m){
     if(!recoveryReady||m.tx.hostTimeline!=recoveryTimeline||m.tx.world!=CurrentWorld()||m.tx.decision!=rc::Decision::Prepared)return false;
     LootSource s;if(m.tx.action!=rc::Action::Unlock&&guestLootSource.vob){const auto id=RecoveryIdentity(guestLootSource);if(id.kind==m.tx.source.kind&&id.name==m.tx.source.name&&id.position==m.tx.source.position)s=guestLootSource;}else s=RecoverySource(m.tx);
-    if(!s.vob||s.vob->homeWorld!=ogame->GetWorld()||!haveTarget||Now()-lastSnapshotAt>1000||Distance2(s.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return false;
+    if(!s.vob||s.vob->homeWorld!=ogame->GetWorld()||!haveTarget||timing::Elapsed(Now(),lastSnapshotAt)>1000||Distance2(s.vob->GetPositionWorld(),zVEC3(target.x,target.y,target.z))>250000)return false;
     if(m.tx.action==rc::Action::Unlock)return s.chest&&(!guestLootSource.vob||guestLootSource.vob==s.vob)&&!LootUIOpen(s);
     return s.vob==guestLootSource.vob&&m.lease==lootLedger.Lease()&&m.revision==lootLedger.Revision()&&(!s.chest||!s.chest->locked)&&(!s.corpse||(m.tx.source.kind==lo::Source::Merchant?!s.corpse->IsDead():(s.corpse->IsDead()||s.corpse->IsUnconscious())))&&WorldValidatePrice(m);
 }
@@ -280,7 +280,7 @@ void RecoveryFrame(){
     if(recoveryLoading||recoverySaveSlot>=0||!player||!ogame||!ogame->GetWorld()||!recoveryError.empty())return;
     try{
         const auto now=Now();
-        if(recoveryReady&&(recoveryLastReplay==0||now-recoveryLastReplay>=1000||recoveryLastWorld!=CurrentWorld())){
+        if(recoveryReady&&(recoveryLastReplay==0||timing::Elapsed(now,recoveryLastReplay)>=1000||recoveryLastWorld!=CurrentWorld())){
         recoveryLastReplay=now;recoveryLastWorld=CurrentWorld();recoveryBlocked=false;
         for(auto r:recoveryStore.Ordered()){
             if((r.role==rc::Role::Host?r.tx.hostTimeline:r.tx.ownerTimeline)!=recoveryTimeline)continue;
@@ -291,7 +291,7 @@ void RecoveryFrame(){
         if(!CombatConnected()){recoveryHello=false;recoveryLockSent.clear();return;}
         if(HostCombat()){
             if(recoveryReady&&!recoveryHello){rc::Message hello;hello.tx.hostTimeline=recoveryTimeline;QueueRecovery(hello);recoveryHello=true;}
-            if(recoveryReady&&now-recoveryLastLocks>=1000){
+            if(recoveryReady&&timing::Elapsed(now,recoveryLastLocks)>=1000){
                 recoveryLastLocks=now;
                 struct Candidate {oCMobContainer* chest;lo::Identity identity;std::string key;unsigned long long last;};
                 std::vector<Candidate> candidates;auto* world=ogame->GetGameWorld();
@@ -301,7 +301,7 @@ void RecoveryFrame(){
                     auto id=LootIdentity(c);const auto key=id.name+std::to_string(id.position[0])+","+std::to_string(id.position[1])+","+std::to_string(id.position[2]);
                     const auto old=recoveryLockSent.find(key);const bool changed=old==recoveryLockSent.end()||old->second!=(c->locked!=0);
                     const auto last=changed?0:recoveryLockTimes[key];
-                    if(changed||now-last>=5000)candidates.push_back({c,id,key,last});
+                    if(changed||timing::Elapsed(now,last)>=5000)candidates.push_back({c,id,key,last});
                 }
                 std::sort(candidates.begin(),candidates.end(),[](const Candidate& a,const Candidate& b){return a.last<b.last;});
                 for(std::size_t i=0;i<(std::min)(std::size_t(8),candidates.size());++i){
@@ -309,9 +309,9 @@ void RecoveryFrame(){
                     QueueRecovery(m);recoveryLockSent[c.key]=m.locked;recoveryLockTimes[c.key]=now;
                 }
             }
-        }else if(!recoveryPeerTimeline.empty()&&recoveryReady&&now-recoveryLastQueryScan>=500){
+        }else if(!recoveryPeerTimeline.empty()&&recoveryReady&&timing::Elapsed(now,recoveryLastQueryScan)>=500){
             recoveryLastQueryScan=now;int sent=0;for(const auto& r:recoveryStore.Ordered()){
-                if(r.role!=rc::Role::Owner||r.tx.ownerTimeline!=recoveryTimeline||r.tx.hostTimeline!=recoveryPeerTimeline||r.tx.decision!=rc::Decision::Prepared||now-recoveryQueries[r.tx.id]<2000)continue;
+                if(r.role!=rc::Role::Owner||r.tx.ownerTimeline!=recoveryTimeline||r.tx.hostTimeline!=recoveryPeerTimeline||r.tx.decision!=rc::Decision::Prepared||timing::Elapsed(now,recoveryQueries[r.tx.id])<2000)continue;
                 recoveryQueries[r.tx.id]=now;rc::Message query;query.op=rc::Op::Query;query.request=NextLootRequest();query.tx=r.tx;QueueRecovery(query);if(++sent>=4)break;
             }
         }

@@ -44,7 +44,7 @@ struct CharacterSpellScope {
     void Finish(int result){if(!active)return;try{const auto count=CharacterCaptureSummons(before,HostCombat()?co::HostPlayer:co::GuestPlayer,token);if(!count){CombatLog("summon_empty","spell="+std::to_string(spell)+" native_result="+std::to_string(result)+" no native creature created");return;}if(!HostCombat()){ch::Summon request;request.spell=spell;request.token=token;CharacterQueue(ch::Encode(request));}CombatLog("summon_cast","spell="+std::to_string(spell)+" count="+std::to_string(count)+" token="+token);}catch(const std::exception& e){combatFailure=e.what();}}
 };
 void CharacterReceiveSummon(const co::Bytes& bytes){
-    ch::Summon request;if(!ch::Decode(bytes,request)||!HostCombat()||!characterReady||!PartnerNpc()||!havePeerCombat||peerCombat.stats.attributes[0]<=0||!haveTarget||Now()-lastSnapshotAt>1000)throw std::runtime_error("Invalid guest summon request");
+    ch::Summon request;if(!ch::Decode(bytes,request)||!HostCombat()||!characterReady||!PartnerNpc()||!havePeerCombat||peerCombat.stats.attributes[0]<=0||!haveTarget||timing::Elapsed(Now(),lastSnapshotAt)>1000)throw std::runtime_error("Invalid guest summon request");
     auto previous=characterSummons.find(request.token);if(previous!=characterSummons.end()){if(previous->second!=request.spell)throw std::runtime_error("Summon token payload conflict");return;}
     if(characterSummons.size()>=1024)throw std::runtime_error("Summon session safety limit");
     if(!parser||parser->GetIndex(zSTRING("ZK_COOP_REPLAY_SUMMON"))<0)throw std::runtime_error("Summon script helper missing");

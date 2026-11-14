@@ -26,6 +26,7 @@
 #include "coop/SessionProtocol.h"
 #include "coop/CavalornPolicy.h"
 #include "coop/QolPolicy.h"
+#include "coop/Timing.h"
 #include "coop/Extensions.h"
 #include "coop/FileHash.h"
 #include "coop/NinjaArchiveHash.h"
@@ -443,12 +444,12 @@ void ApplyRemote(unsigned long long now, float seconds) {
     if(havePeerCombat)QolApplySprint(PartnerNpc(),peerCombat.sprint);
     if(remoteModel){remoteModel->aniTransScale=zVEC3(0,0,0);remoteModel->doVobRot=FALSE;}
     if(!havePeerCombat||!SetCombatAnimation(remoteModel,peerCombat.animation)){if(!havePeerCombat||!character::SpecialMovement(peerCombat.stats.bodyState))Animate(now < movingUntil);}
-    if(now-lastRemoteLog>=1000){
+    if(timing::Elapsed(now,lastRemoteLog)>=1000){
         lastRemoteLog=now;auto* active=remoteModel->numActiveAnis>0&&remoteModel->numActiveAnis<=6?remoteModel->aniChannels[0]:nullptr;
         std::ostringstream text;text<<"target="<<target.x<<","<<target.y<<","<<target.z<<" yaw="<<target.yaw<<" error="<<std::sqrt(distanceSquared)
             <<" actual="<<remote->GetPositionWorld()[0]<<","<<remote->GetPositionWorld()[1]<<","<<remote->GetPositionWorld()[2]
             <<" collision_static="<<remote->collDetectionStatic<<" collision_dynamic="<<remote->collDetectionDynamic<<" placed="<<placed<<" movement_block="<<int(remote->isInMovementMode)<<" sleep="<<int(remote->sleepingMode)
-            <<" moving="<<isMoving<<" snapshot_age_ms="<<(now-lastSnapshotAt)<<" active_anis="<<remoteModel->numActiveAnis<<" ani="<<remoteAnimation<<" frame="<<(active?active->actFrame:-1.0f);
+            <<" moving="<<isMoving<<" snapshot_age_ms="<<(timing::Elapsed(now,lastSnapshotAt))<<" active_anis="<<remoteModel->numActiveAnis<<" ani="<<remoteAnimation<<" frame="<<(active?active->actFrame:-1.0f);
         diagnostics.Write(2,"proxy_state",text.str());
     }
 }
@@ -695,7 +696,7 @@ void ObserveState(unsigned long long now) {
         previousHp=hp;previousMana=mana;previousDialog=dialog;haveState=true;
     }
     if(previousPeerName!=network.PeerName()) {previousPeerName=network.PeerName();diagnostics.Write(1,"peer_name",previousPeerName);}
-    if(now-lastStateLog>=1000) {
+    if(timing::Elapsed(now,lastStateLog)>=1000) {
         lastStateLog=now;const auto p=player->GetPositionWorld();const auto& stats=network.Stats();
         std::ostringstream text;text<<"world="<<CurrentWorld()<<" x="<<p[0]<<" y="<<p[1]<<" z="<<p[2]<<" hp="<<hp<<" mana="<<mana
           <<" rx="<<stats.received<<" malformed="<<stats.malformed<<" ignored="<<stats.ignored<<" snapshots="<<stats.snapshots;
@@ -726,7 +727,7 @@ void Initialize() {
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.35 initialized; protocol=11; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.36 initialized; protocol=11; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -741,7 +742,7 @@ void Frame() {
     const auto now = Now();
     CharacterObserve(now);
     ApplyLocalAppearance();
-    const float elapsed = static_cast<float>((now - lastFrame) > 250 ? 250 : now - lastFrame) / 1000.0f;
+    const float elapsed = static_cast<float>((timing::Elapsed(now,lastFrame)) > 250 ? 250 : timing::Elapsed(now,lastFrame)) / 1000.0f;
     lastFrame = now;
     network.Poll(now);
     ReportNetworkStatus();
@@ -767,7 +768,7 @@ void Frame() {
             if(haveTarget){const float dx=incoming.x-target.x,dy=incoming.y-target.y,dz=incoming.z-target.z;if(dx*dx+dy*dy+dz*dz>1.0f)movingUntil=now+200;}
             target = incoming; haveTarget = true;lastSnapshotAt=now;
         }
-        if (now - lastSend >= 50) {
+        if (timing::Elapsed(now,lastSend) >= 50) {
             const auto position = player->GetPositionWorld();
             const auto direction = player->GetAtVectorWorld();
             const net::Snapshot snapshot{position[0], position[1], position[2],
@@ -808,8 +809,8 @@ bool BeginSavePause(){
     const auto started=Now();if(!network.SetSaving(true,started))return false;
     // Stay on the engine thread. A blocking native save must not start while
     // the single initial pause datagram (or an earlier event) is still lost.
-    while(CombatConnected()&&!network.PeerSaving()&&!network.SavingReady()&&Now()-started<1000){network.Poll(Now());if(!network.SavingReady())Sleep(1);}
-    if(network.SavingReady()){LootLog("save_pause_confirmed","elapsed_ms="+std::to_string(Now()-started));return true;}
+    while(CombatConnected()&&!network.PeerSaving()&&!network.SavingReady()&&timing::Elapsed(Now(),started)<1000){network.Poll(Now());if(!network.SavingReady())Sleep(1);}
+    if(network.SavingReady()){LootLog("save_pause_confirmed","elapsed_ms="+std::to_string(timing::Elapsed(Now(),started)));return true;}
     LootLog("save_pause_unconfirmed","pending="+std::to_string(network.PendingEvents())+" status="+network.LastStatus());
     if(CombatConnected()&&!network.SetSaving(false,Now()))Leave("Cannot cancel save pause; reconnect before retrying save");
     return false;

@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include "coop/Timing.h"
 namespace orebound::qol {
 struct SessionLatch {bool used=false;bool Update(bool active){used=used||active;return used;}void Reset(){used=false;}};
 inline bool BlockUpstream(SessionLatch& latch,bool active,bool recoveryFault){return latch.Update(active)||recoveryFault;}
@@ -17,6 +18,15 @@ inline const char* SprintOverlay(unsigned value){
 inline bool BodyAllowsLoot(unsigned body){body&=31;return body<=5||body==7;}
 struct Context {bool connected=false,ready=false,menu=false,dialog=false,inventory=false,interaction=false,alive=false;unsigned weapon=0,body=0;};
 inline bool CanLoot(const Context& c){return c.connected&&c.ready&&!c.menu&&!c.dialog&&!c.inventory&&!c.interaction&&c.alive&&!c.weapon&&BodyAllowsLoot(c.body);}
-inline bool Due(std::uint64_t now,std::uint64_t last){return !last||now-last>=120;}
-inline bool QuickItem(bool eligible,unsigned mainFlag,unsigned flags,bool corpse=false){return eligible&&(!corpse||!(mainFlag&16))&&!(flags&((1u<<12)|(1u<<30)));}
+inline bool Due(std::uint64_t now,std::uint64_t last){return !last||timing::Elapsed(now,last)>=120;}
+// Mission items can be picked up normally and by upstream Quickloot. The
+// authoritative transaction path must not silently reject keys or stone tablets.
+inline bool QuickItem(bool eligible,unsigned mainFlag,unsigned flags,bool corpse=false){return eligible&&(!corpse||!(mainFlag&16))&&!(flags&(1u<<30));}
+inline const char* BlockReason(const Context& c){
+    if(!c.connected)return "disconnected";if(!c.ready)return "not_ready";
+    if(c.menu)return "menu";if(c.dialog)return "dialogue";if(c.inventory)return "inventory";
+    if(c.interaction)return "interaction";if(!c.alive)return "incapacitated";
+    if(c.weapon)return "weapon_drawn";if(!BodyAllowsLoot(c.body))return "body_state";
+    return "";
+}
 }
