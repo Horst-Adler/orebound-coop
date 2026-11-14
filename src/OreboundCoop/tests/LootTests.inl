@@ -1,3 +1,18 @@
+void TestNativeInventoryInput(){
+    namespace input=orebound::inventory_input;
+    Check(input::Action(false,false,true,false),"native left click is intercepted even without a custom key binding");
+    Check(input::Action(true,false,false,false),"native keyboard action follows the authoritative transfer path");
+    Check(input::Action(false,true,false,false),"native take-all action cannot bypass ownership");
+    Check(!input::Action(true,true,true,true),"closing a blocked inventory remains possible");
+    Check(!input::Action(false,false,false,false),"navigation alone never transfers an item");
+    Check(input::Amount(1,10000,false,true,true)==1,"single dagger cannot turn into a larger transfer");
+    Check(input::Amount(25,10,false,false,true)==10,"native partial stack transfer count retained");
+    Check(input::Amount(4,10,false,false,true)==4,"partial transfer clamped to actual stock");
+    Check(input::Amount(25,10000,true,false,true)==1,"new primary action starts with one item");
+    Check(input::Amount(25,0,true,true,true)==25,"take-all requests exactly the selected stack");
+    Check(input::Amount(25,10000,false,true,false)==1,"native no-multiple restriction respected");
+    Check(input::Amount(0,10000,false,true,true)==0,"empty source cannot generate a transfer");
+}
 void TestLootProtocol(){
     namespace l=orebound::loot;
     l::Message m;m.op=l::Op::Open;m.request=10;m.source.kind=l::Source::Chest;m.source.name="CHEST_XARDAS";m.source.position={100,200,-300};

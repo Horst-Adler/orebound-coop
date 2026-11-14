@@ -177,6 +177,7 @@ void CharacterApplyPeerVisual(){
     }
     remoteModel->SetRandAnisEnabled(FALSE);remoteModel->aniTransScale=zVEC3(0,0,0);remoteModel->doVobRot=FALSE;remoteAnimation=-1;characterPeerVisualKey=key;
     CombatLog("character_visual","peer model="+v.model+" humanoid="+std::to_string(v.humanoid)+" transformed="+std::to_string(v.transformed));
+    ReportAvatarClothing(npc,"peer");
 }
 void CharacterObserve(unsigned long long){
     if(!player)return;

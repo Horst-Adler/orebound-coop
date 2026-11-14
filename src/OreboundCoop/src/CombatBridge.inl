@@ -132,7 +132,7 @@ NpcBinding* ResolveCombatNpc(const co::Npc& message){
     if(resolved>=0){best=candidates[resolved];closest=distances[resolved];}
     if(matches==1&&unique->npc->IsHuman()){best=unique;closest=0;}
     if(!best&&!candidates.empty()){
-        if(timing::Elapsed(Now(),mappingWarnings[message.id])>5000){mappingWarnings[message.id]=Now();float nearest=4000000.0f;for(float d:distances)nearest=(std::min)(nearest,d);CombatLog("npc_mapping_unresolved","ambiguous id="+std::to_string(message.id)+" instance="+std::to_string(message.instance)+" candidates="+std::to_string(candidates.size())+" anchor="+std::to_string(anchor[0])+","+std::to_string(anchor[1])+","+std::to_string(anchor[2])+" nearest_cm="+std::to_string(std::sqrt(nearest))+" life="+std::to_string(message.life));}return nullptr;
+        if(timing::Elapsed(Now(),mappingWarnings[message.id])>5000){mappingWarnings[message.id]=Now();float nearest=4000000.0f,second=4000000.0f;for(float d:distances){if(d<nearest){second=nearest;nearest=d;}else second=(std::min)(second,d);}CombatLog("npc_mapping_unresolved","ambiguous id="+std::to_string(message.id)+" instance="+std::to_string(message.instance)+" candidates="+std::to_string(candidates.size())+" anchor="+std::to_string(anchor[0])+","+std::to_string(anchor[1])+","+std::to_string(anchor[2])+" nearest_cm="+std::to_string(std::sqrt(nearest))+" second_cm="+std::to_string(std::sqrt(second))+" gap_cm="+std::to_string(std::sqrt(second)-std::sqrt(nearest))+" life="+std::to_string(message.life));}return nullptr;
     }
     if(!best){
         if(message.life!=1)return nullptr;

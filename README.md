@@ -4,7 +4,7 @@
 
 Updates preserve existing character profiles, saves and inventory journals.
 
-**Current development build: 0.1.0-alpha.36 · protocol 11 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
+**Current development build: 0.1.0-alpha.37 · protocol 11 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
 
 [Install](INSTALLATION.md) · [Build](BUILDING.md) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Languages](docs/LOCALIZATION.md) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
@@ -22,7 +22,7 @@ Each player runs a separate licensed Gothic II installation. One plugin supports
 
 Optional own start-menu artwork uses the existing native full-screen background, with the inner menu background transparent and the original Gothic II logos retained. It requires the matching separately supplied own artwork archive. See [menu artwork](docs/MENU-ARTWORK.md). The host menu visuals and startup transition have been confirmed; client display and shared gameplay acceptance remain separate.
 
-Technical implementation is distinguished from gameplay acceptance. Previous tests confirmed parts of connection, movement, combat, guest dialogue and player collision handling. The latest tower test confirmed regular pickups on both peers and individual saves retaining the session. A container-transfer disconnect stopped the route; Alpha.36 corrects its clock arithmetic. Container/recovery, host Quickloot and quest acceptance still require retesting. See [Alpha.36](docs/ALPHA-36.md).
+Technical implementation is distinguished from gameplay acceptance. The latest tower test confirmed connection, movement, stairs/distance and sprint, but exposed a duplicated chest item. Alpha.37 intercepts the previously unguarded native ACTION handlers and adds transfer-path diagnostics. A cleared Sprint key no longer causes repeated decoder warnings. Optional female everyday clothing reuses an existing atlas through a private native body copy. One-item conservation, deposits/corpses and actual clothing appearance still require native retesting. See [Alpha.37](docs/ALPHA-37.md).
 
 ## Requirements and optional modules
 

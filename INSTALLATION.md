@@ -60,3 +60,6 @@ The current alpha can install the matching own artwork archive with `-MenuArtwor
 ## Optional existing renderer repair
 
 Obtain the original GD3D11 v17.9.7 archive separately. `scripts/Install-RendererRuntime.ps1 -GamePath <game> -ArchivePath <archive> -CheckOnly` checks every packaged file. Omit `-CheckOnly` to back up and restore differing files while Gothic is closed. Personal INI/JSON/XML settings are preserved. Use `scripts/Restore-RendererRuntime.ps1 -ManifestPath <manifest>` for the matching rollback. Renderer files are not part of the co-op gameplay content ID; verify them separately. Runtime file verification does not establish native visual acceptance.
+
+
+Alpha.37 adds an optional locally built `build/alpha/avatar/OreboundCoop_Avatar.vdf`. When supplied, the installer verifies `config/avatar-clothing.json`, backs up any existing target and includes the archive in the gameplay content fingerprint. Both peers must use the same resources. For Sprint users, rebuild the compatibility archive with the current `Prepare-QolCompatibility.py` and supply the selected Sprint/Toolkit files using `-QolDirectory` and `-OptionalModules Sprint`. Personal controls, appearance choice, saves and recovery journals are retained. A missing optional clothing archive preserves the native avatar; no game is started by installation.

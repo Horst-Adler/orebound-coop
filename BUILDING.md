@@ -25,3 +25,6 @@ Default tests include interactive DE/US keyboard checks. `--headless` explicitly
 `scripts/Test-Tools.py` tests configuration preservation. `scripts/Audit-Publication.py --staged` verifies the complete explicit publication allowlist. Never stage original games, third-party archives, SDK binaries, real logs or website files.
 
 Optional own main-menu artwork: install Pillow and pass `-MenuArtworkSource <your-image.png>`. The converter updates the own hash catalogue before the DLL build. See [artwork instructions](docs/MENU-ARTWORK.md). Without the optional archive, the native menu is retained.
+
+
+Optional female clothing: install Pillow and provide both `-AvatarArtworkSource <atlas.png>` and `-AvatarGamePath <licensed-Gothic-II-directory>` to the full build. `Build-AvatarClothing.py` reads the native female body from that installation, verifies unchanged geometry/UVs/skeleton, and writes a separately hash-pinned `OreboundCoop_Avatar.vdf`. The source repository includes neither the native mesh nor the private atlas. This resource feature uses Union plus VDF assets; Ninja remains responsible for bounded script helpers and optional comfort patches. Native visual acceptance is required after conversion.

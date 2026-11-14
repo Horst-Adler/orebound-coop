@@ -244,6 +244,11 @@ bool WorldTradeTransfer(oCViewDialogTrade* dialog,bool selling,int count){
         LootLog("trade_request","tx="+tx.id+" amount="+std::to_string(amount)+" price="+std::to_string(price));
     }catch(const std::exception& e){RecoveryFail(e.what());}return true;
 }
+bool WorldTradeNativeAction(oCItemContainer* container,int amount){
+    if(!worldTradeManager||!worldTradeManager->DlgTrade||container!=WorldTradeUI(worldTradeManager->Npc))return true;
+    // A merchant UI must use price/payment validation, never a free loot grant.
+    return WorldTradeTransfer(worldTradeManager->DlgTrade,false,static_cast<short>((std::min)(32767,(std::max)(0,amount))));
+}
 bool WorldValidatePrice(const rc::Message& m){
     if(m.tx.action!=rc::Action::Buy&&m.tx.action!=rc::Action::Sell)return true;
     if(m.tx.source.kind!=lo::Source::Merchant||m.tx.item==m.tx.currency||m.tx.currency!=static_cast<unsigned>(oCItemContainer::GetCurrencyInstance()))return false;

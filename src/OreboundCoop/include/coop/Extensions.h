@@ -8,7 +8,7 @@ enum class State {Absent,Supported,Unsafe};
 struct Definition {const char* name;const char* file;const char* hash;const char* marker;};
 inline const std::array<Definition,4>& Definitions(){static const std::array<Definition,4> d{{
  {"Quickloot 1.9.5 + bridge 1","Quickloot.vdf","0352BC03B6E9C53CB2D3D4DC89426073C7E45AEE9272A994C7C9E178108B772F","NINJA_QUICKLOOT_ZK_BRIDGE_REV"},
- {"Sprint 2.4.0 + bridge 1","Sprint.vdf","9D06C29735810D9D07F551F9409ADE23494E983FF6F560C157855B82B8C77967","NINJA_SPRINT_ZK_BRIDGE_REV"},
+ {"Sprint 2.4.0 + bridge 1 + binding guard","Sprint.vdf","DCA1AD66B2E15A69682A951C6B0CCFC80C7734C95ECD531DD77E04C1228DAFFC","NINJA_SPRINT_ZK_BRIDGE_REV"},
  {"Toolkit 16.0","Toolkit.vdf","08A8873043AE3E95C808E0AD519E00F302239BF58A561F3CA22EA6D00F5DC260",""},
  {"PatchMenu 1.1.1","PatchMenu.vdf","8DA288D5FCFF42EDDC2CBA99548A9C03A464E146DD9C5CFE39F7DAD2FFD08F7A",""}
  }};return d;}

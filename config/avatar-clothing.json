@@ -1,0 +1,9 @@
+{
+  "Schema": 1,
+  "Optional": true,
+  "File": "Data/OreboundCoop_Avatar.vdf",
+  "SHA256": "5A89DDA75679B36ED0667136AB668AADF30D61BE536F872726137550619A2CF5",
+  "Body": "ORB_BODY_BABE0",
+  "Texture": "ORB_BODY_CLOTH_V0_C0.TGA",
+  "BodyTextureVariant": 0
+}

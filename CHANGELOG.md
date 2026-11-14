@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-alpha.37 — 2026-11-14
+
+- Route direct native chest/corpse ACTION input through host-confirmed inventory recovery; block untracked client mutations and log the actual transfer path.
+- Guard missing or cleared Sprint key bindings in the pinned compatibility output.
+- Add optional opaque BC1 everyday clothing built locally from supplied art and the native female mesh, with hash/material diagnostics.
+- Keep ambiguous creature matching conservative and report both nearest distances.
+- 4,787 technical assertions pass; native duplication/clothing retests and system-crash investigation remain open. No game launched.
+
 ## 0.1.0-alpha.36 — 2026-11-14
 
 - Fix immediate loot-lease timeout when journal callbacks publish newer timestamps than the frame clock; retain real expiry and add timestamp diagnostics.

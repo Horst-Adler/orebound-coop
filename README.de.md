@@ -1,6 +1,6 @@
 # Orebound Co-op – deutsche Kurzanleitung
 
-Aktueller Entwicklungsstand: Alpha.36, Protokoll 11 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
+Aktueller Entwicklungsstand: Alpha.37, Protokoll 11 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
 
 Die eigene Oberfläche unterstützt Deutsch und Englisch. Auswahl: **Union & Plugins → Orebound Co-op → Sprache / Language**. Nach der Auswahl Einstellungen speichern. Die Sprache gilt lokal; beide PCs können unterschiedlich eingestellt sein. Öffentliche Neuinstallationen verwenden Englisch, bestehende Profile werden bei der Migration standardmäßig Deutsch behalten.
 
@@ -11,3 +11,5 @@ Build und Installation stehen in [BUILDING.md](BUILDING.md) und [INSTALLATION.md
 Polnisch und Russisch sind für die Vollversion vorgesehen. Produktive Arbeitswebsite und interne Checklisten bleiben Deutsch. Noch keine Freigabe einer vollständigen Koop-Kampagne.
 
 Optionales eigenes Startmenübild mit transparentem inneren Menüfenster und erhaltenen Gothic-II-Logos. Passendes eigenes Bildpaket separat erforderlich; Menübild bestätigt; Spielabnahme offen. [Anleitung](docs/MENU-ARTWORK.md).
+
+Alpha.37 ergänzt den zuvor umgangenen normalen Aktionspfad bei Kisten/Leichen, toleriert leere Sprint-Tastenbelegungen und unterstützt die optionale weibliche Alltagskleidung als separat lokal gebautes Ressourcenarchiv. Erneute Spielprüfung von Entnahme, Einlagern und Kleidung bleibt offen. [Änderungen](docs/ALPHA-37.md).

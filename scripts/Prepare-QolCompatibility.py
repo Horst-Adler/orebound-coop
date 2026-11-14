@@ -53,7 +53,20 @@ def adapt(name,file,function,marker,guard):
                 # existing loot messages even while inventory mutations are blocked.
                 place='// Check for RMB pressed / held';assert before.count(place)==1
                 body=before.replace(place,injected+'\n\t'+place)
-            else:body=before.replace(needle,needle+injected)
+            else:
+                body=before.replace(needle,needle+injected)
+                # A cleared binding or native controls reset can leave an empty
+                # KEYS entry after Sprint's one-time menu initialization. Calling
+                # MEM_GetKey then emits a warning/stack every frame. An unbound
+                # sprint key is valid; automatic sprint remains independent.
+                old='sprintKeyPressed = (MEM_KeyPressed(MEM_GetKey(sprintKey))) || (MEM_KeyPressed(MEM_GetSecondaryKey(sprintKey)));'
+                assert body.count(old)==1
+                new='''sprintKeyPressed = 0;
+    var string zkSprintBinding; zkSprintBinding = MEM_GetGothOpt("KEYS", sprintKey);
+    if (STR_Len(zkSprintBinding) >= 4) {
+        sprintKeyPressed = (MEM_KeyPressed(MEM_GetKey(sprintKey))) || (MEM_KeyPressed(MEM_GetSecondaryKey(sprintKey)));
+    };'''
+                body=body.replace(old,new)
             after='const int '+marker+' = 1;\r\n'+body
             data=after.encode('cp1252')
         files[at]=data

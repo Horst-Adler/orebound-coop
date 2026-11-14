@@ -191,7 +191,10 @@ bool LootInterceptTransfer(oCItemContainer* container,int,int amount){
     if(!lootNativeBypass&&RecoveryTransfer(container,amount))return true;
     if(lootNativeBypass||!CombatConnected())return false;
     if(HostCombat()){if(guestLootSource.vob&&(container==LootUI(guestLootSource))){notice=Ui("ui_8c60f10d6461");return true;}return false;}
-    if(!clientLootSource.vob)return false;
+    if(!clientLootSource.vob){
+        if(container!=&player->inventory2||container->invMode==INV_MODE_CONTAINER||container->invMode==INV_MODE_PLUNDER||container->invMode==INV_MODE_STEAL){notice=Ui("ui_84ab6893f077");LootLog("loot_transfer_blocked","reason=untracked_client_inventory amount="+std::to_string(amount));return true;}
+        return false;
+    }
     auto* sourceUI=LootUI(clientLootSource);
     if(container!=sourceUI){if(container==&player->inventory2){notice=Ui("ui_23f7e3fcb536");return true;}return false;}
     if(clientPendingTake||!clientLease||!clientLootShown)return true;
@@ -202,6 +205,31 @@ bool LootInterceptTransfer(oCItemContainer* container,int,int amount){
         LootLog("loot_take_request","request="+std::to_string(request.request)+" token="+std::to_string(request.item.token)+" amount="+std::to_string(request.item.amount));return true;
     }
     notice=Ui("ui_2f084074674d");return true;
+}
+bool LootInterceptNativeAction(oCItemContainer* container,int key,const char* path){
+    if(lootNativeBypass||!CombatConnected()||!player||!zinput||!container||key<0||key>4096||container==&player->inventory2||!container->IsOpen()||!container->IsActive())return false;
+    if(HostCombat()&&(!guestLootSource.vob||container!=LootUI(guestLootSource)))return false;
+    // Closing the native window must remain possible even while a transfer is
+    // blocked. Native HandleEvent gives these bindings priority over action.
+    const bool closing=zinput->IsBinded(14,key)||zinput->IsBinded(15,key)||key==MOUSE_BUTTONRIGHT;
+    const bool primary=zinput->IsBinded(5,key)!=0,all=zinput->IsBinded(11,key)!=0;
+    if(!inventory_input::Action(primary,all,key==MOUSE_BUTTONLEFT,closing))return false;
+    auto* item=container->GetSelectedItem();
+    const bool first=zinput->IsBindedToggled(5,key)||(key==MOUSE_BUTTONLEFT&&zinput->KeyToggled(key));
+    const auto amount=inventory_input::Amount(item&&item->amount>0?static_cast<unsigned>(item->amount):0,container->GetTransferCount(),first,all,container->CanTransferMoreThanOneItem()!=FALSE);
+    if(HostCombat()){
+        LootInterceptTransfer(container,0,static_cast<int>(amount));
+    }else{
+        // An unrecognised/stale native UI is never permission to mutate a
+        // client inventory. Normal, mass and mouse actions all require a lease.
+        if(clientLootSource.vob&&container==LootUI(clientLootSource)){
+            if(clientLootSource.identity.kind==lo::Source::Merchant)WorldTradeNativeAction(container,static_cast<int>(amount));
+            else LootInterceptTransfer(container,0,static_cast<int>(amount));
+        }
+        else notice=Ui("ui_84ab6893f077");
+    }
+    LootLog("loot_ui_action","path="+std::string(path)+" key="+std::to_string(key)+" instance="+std::to_string(item?item->GetInstance():0)+" amount="+std::to_string(amount)+" lease="+std::to_string(clientLease)+" pending="+std::to_string(clientPendingTake)+" source_match="+std::to_string(clientLootSource.vob&&container==LootUI(clientLootSource)));
+    return true;
 }
 void LootReceive(const std::vector<std::uint8_t>& bytes){
     lo::Message m;if(!lo::Decode(bytes,m)){LootLog("loot_invalid","Malformed loot message");return;}

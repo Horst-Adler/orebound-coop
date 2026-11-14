@@ -163,6 +163,7 @@ bool RecoveryClientTransfer(oCItem* item,unsigned count,unsigned token,bool put)
         if(!recoveryStore.Put(tx,rc::Role::Owner))throw std::runtime_error("Cannot prepare owner transfer");
         if(put&&!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Cannot reserve deposit inventory");
         rc::Message m;m.op=rc::Op::Request;m.tx=tx;m.request=clientPendingTake=NextLootRequest();m.lease=clientLease;m.revision=clientLootRevision;m.token=token;recoveryUiTx=tx.id;QueueRecovery(m);lootClientWait=Now();
+        LootLog("recovery_transfer_request","tx="+tx.id+" action="+(put?std::string("put"):std::string("take"))+" request="+std::to_string(m.request)+" lease="+std::to_string(m.lease)+" revision="+std::to_string(m.revision)+" instance="+std::to_string(tx.item)+" amount="+std::to_string(count));
         return true;
     }catch(const std::exception& e){RecoveryFail(e.what());return false;}
 }

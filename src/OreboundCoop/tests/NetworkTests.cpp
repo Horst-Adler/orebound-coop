@@ -9,6 +9,7 @@
 #include "coop/ActiveAnimations.h"
 #include "coop/NetworkMotion.h"
 #include "coop/LootProtocol.h"
+#include "coop/InventoryInput.h"
 #include "coop/Recovery.h"
 #include "coop/WorldProtocol.h"
 #include "coop/SessionProtocol.h"
@@ -370,6 +371,7 @@ int main(int argc,char** argv) {
         TestActiveAnimationPrefix();
         TestNetworkMovement();
         TestLootProtocol();
+        TestNativeInventoryInput();
         TestLootLedger();
         TestLootSnapshotAndUdp();
         TestLootConservation();

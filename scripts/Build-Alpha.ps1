@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$SdkRoot,[string]$MSBuildPath,[string]$PythonPath="python",[switch]$TestsOnly,[string]$MenuArtworkSource)
+param([string]$SdkRoot,[string]$MSBuildPath,[string]$PythonPath="python",[switch]$TestsOnly,[string]$MenuArtworkSource,[string]$AvatarArtworkSource,[string]$AvatarGamePath)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 if(-not $MSBuildPath){
@@ -21,6 +21,13 @@ if(-not $TestsOnly){
     if($MenuArtworkSource){
         & $PythonPath (Join-Path $PSScriptRoot 'Build-MenuArtwork.py') --image $MenuArtworkSource
         if($LASTEXITCODE -ne 0){throw 'Own menu artwork conversion failed.'}
+    }
+    if($AvatarArtworkSource){
+        if(-not $AvatarGamePath){throw 'Specify -AvatarGamePath for the original native female body.'}
+        & $PythonPath (Join-Path $PSScriptRoot 'Build-AvatarClothing.py') --image $AvatarArtworkSource --game-path $AvatarGamePath
+        if($LASTEXITCODE -ne 0){throw 'Avatar clothing conversion failed.'}
+        & $PythonPath (Join-Path $PSScriptRoot 'Check-AvatarClothing.py')
+        if($LASTEXITCODE -ne 0){throw 'Avatar clothing verification failed.'}
     }
     & $PythonPath (Join-Path $PSScriptRoot "Build-Localization.py")
     if($LASTEXITCODE -ne 0){throw "Localization catalogue build failed."}

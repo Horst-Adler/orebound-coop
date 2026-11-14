@@ -20,6 +20,8 @@
 #include "coop/ActiveAnimations.h"
 #include "coop/NetworkMotion.h"
 #include "coop/LootProtocol.h"
+#include "coop/InventoryInput.h"
+#include "coop/AvatarClothing.h"
 #include "coop/Recovery.h"
 #include "coop/NativeSave.h"
 #include "coop/WorldProtocol.h"
@@ -244,6 +246,7 @@ unsigned CharacterOwner(oCNpc*);
 bool CharacterAllied(oCNpc*,oCNpc*);
 void CharacterGroundTheft(oCItem*,const std::string&);
 combat::Visual CharacterVisual(oCNpc*);
+void ReportAvatarClothing(oCNpc*,const char*);
 void CharacterNpcCapture(combat::Npc&,oCNpc*);
 void CharacterNpcApply(NpcBinding&,const combat::Npc&);
 void CharacterSave(const std::string&,const std::string&,const std::string&,const std::string&);
@@ -266,6 +269,7 @@ bool WorldRecoveryEffect(const recovery::Record&,bool,bool&);
 bool WorldHostRequest(recovery::Message&);
 oCItemContainer* WorldTradeUI(oCNpc*);
 bool WorldTradeBusy(oCNpc*);
+bool WorldTradeNativeAction(oCItemContainer*,int);
 void WorldTradeClose();
 void WorldTradeSnapshot(bool);
 void WorldPrepareMerchant(oCNpc*);
@@ -322,13 +326,38 @@ void Leave(const char* reason) {
 }
 
 void Animate(bool moving);
+bool AvatarClothingAvailable(){
+    static int available=-1;if(available>=0)return available!=0;
+    available=0;
+    const auto path=systemDirectory+"\\..\\Data\\OreboundCoop_Avatar.vdf";
+    try{
+        if(GetFileAttributesA(path.c_str())!=INVALID_FILE_ATTRIBUTES&&extensions::FileSha256(path)==avatar::ArchiveHash)available=1;
+        diagnostics.Write(1,"avatar_clothing",std::string("archive_verified=")+(available?"1":"0")+" body="+(available?avatar::Body:"HUM_BODY_BABE0")+" texture_variant="+(available?"0":"5"));
+    }catch(const std::exception& e){diagnostics.Write(1,"avatar_clothing_fallback",e.what());}
+    return available!=0;
+}
+const char* AvatarBody(bool female){return female?(AvatarClothingAvailable()?avatar::Body:"HUM_BODY_BABE0"):"HUM_BODY_NAKED0";}
+int AvatarBodyTexture(bool female){return female?(AvatarClothingAvailable()?0:5):9;}
+void ReportAvatarClothing(oCNpc* npc,const char* context){
+    if(!npc||!npc->GetModel()||std::string(npc->body_visualName.ToChar()).find(avatar::Body)==std::string::npos)return;
+    auto* model=npc->GetModel();bool seen=false;
+    for(int i=0;i<(std::min)(64,model->meshLibList.GetNumInList());++i){
+        auto* entry=model->meshLibList[i];if(!entry)continue;auto& textures=entry->texAniState;
+        for(int j=0;textures.nodeTexList&&j<(std::min)(64,textures.numNodeTex);++j){
+            auto* texture=textures.nodeTexList[j];if(!texture)continue;
+            const std::string name=texture->GetObjectName().ToChar();
+            if(name.find("ORB_BODY_CLOTH")!=std::string::npos){seen=true;diagnostics.Write(1,"avatar_clothing_material","context="+std::string(context)+" texture="+name+" variant="+std::to_string(textures.actAniFrames[0][j]));}
+        }
+    }
+    diagnostics.Write(1,"avatar_clothing_binding","context="+std::string(context)+" body="+npc->body_visualName.ToChar()+" material_seen="+std::to_string(seen)+" equipped_armor="+std::to_string(npc->GetEquippedArmor()!=nullptr));
+}
 bool CreateProxy() {
     if (remote || proxyFailed || !haveTarget || !ogame || !player) return remote != nullptr;
     remote = CreateCombatActor();
     if(!remote)return false;
     remoteAppearance=network.PeerAppearance();
     const bool female=remoteAppearance==net::Appearance::Velaya;
-    meshName=female?"HUM_BODY_BABE0.ASC":"HUM_BODY_NAKED0.ASC";
+    meshName=std::string(AvatarBody(female))+".ASC";
     headName=female?"HUM_HEAD_BABE.MMB":"HUM_HEAD_PONY.MMB";
     remote->SetObjectName(zSTRING("ZWEIKLANG_REMOTE_VISUAL"));
     remote->dontWriteIntoArchive = TRUE;
@@ -367,12 +396,12 @@ bool CreateProxy() {
     }
     // TRUE builds the node's texture animation list, required for face variants.
     remoteModel->SetNodeVisual(headNode,head,TRUE);head->Release();
-    const int bodyResult=remoteModel->SetMeshLibTexture(zSTRING(meshName.c_str()),0,female?5:9,nullptr);
+    const int bodyResult=remoteModel->SetMeshLibTexture(zSTRING(meshName.c_str()),0,AvatarBodyTexture(female),nullptr);
     remoteModel->SetMeshLibTexture(zSTRING(meshName.c_str()),1,0,nullptr);
     remoteModel->SetNodeMeshTexture(zSTRING("BIP01 HEAD"),0,0,nullptr);
     remoteModel->SetNodeMeshTexture(zSTRING("BIP01 HEAD"),1,0,nullptr);
     const int faceResult=remoteModel->SetNodeMeshTexture(zSTRING("BIP01 HEAD"),0,female?137:18,&faceFilter);
-    diagnostics.Write(1,"proxy_texture","body_channel=0 variant="+std::to_string(female?5:9)+" result="+std::to_string(bodyResult)+" head_channel=0 variant="+std::to_string(female?137:18)+" result="+std::to_string(faceResult));
+    diagnostics.Write(1,"proxy_texture","body_channel=0 variant="+std::to_string(AvatarBodyTexture(female))+" result="+std::to_string(bodyResult)+" head_channel=0 variant="+std::to_string(female?137:18)+" result="+std::to_string(faceResult));
     remoteModel->SetRandAnisEnabled(FALSE);
     remoteModel->doVobRot = FALSE;
     // Engine animation updates advance awake Vobs. Root motion is disabled:
@@ -423,8 +452,8 @@ void ApplyRemote(unsigned long long now, float seconds) {
         // Keep the combat actor's identity and any enemy references intact.
         remoteAppearance=network.PeerAppearance();const bool female=remoteAppearance==net::Appearance::Velaya;
         if(auto* npc=PartnerNpc()){
-            zSTRING body(female?"HUM_BODY_BABE0":"HUM_BODY_NAKED0"),head(female?"HUM_HEAD_BABE":"HUM_HEAD_PONY");
-            npc->SetAdditionalVisuals(body,female?5:9,0,head,female?137:18,0,-1);
+            zSTRING body(AvatarBody(female)),head(female?"HUM_HEAD_BABE":"HUM_HEAD_PONY");
+            npc->SetAdditionalVisuals(body,AvatarBodyTexture(female),0,head,female?137:18,0,-1);
             remoteModel=npc->GetModel();if(remoteModel){remoteModel->doVobRot=FALSE;remoteModel->aniTransScale=zVEC3(0,0,0);}
             remoteAnimation=-1;
         }
@@ -520,12 +549,13 @@ void ApplyLocalAppearance() {
     if(!player||!player->GetModel())return;
     if(!character::LocalVisualAllowed(player->IsHuman()!=FALSE,static_cast<unsigned>(player->GetBodyState()))){appearancePlayer=nullptr;appliedAppearance=-1;return;}
     if(appearancePlayer==player&&appliedAppearance==wanted)return;
-    zSTRING body(options.female?"HUM_BODY_BABE0":"HUM_BODY_NAKED0");
+    zSTRING body(AvatarBody(options.female));
     zSTRING head(options.female?"HUM_HEAD_BABE":"HUM_HEAD_PONY");
     // -1 creates/equips no item; retain the currently equipped armor.
-    player->SetAdditionalVisuals(body,options.female?5:9,0,head,options.female?137:18,0,-1);
+    player->SetAdditionalVisuals(body,AvatarBodyTexture(options.female),0,head,options.female?137:18,0,-1);
+    ReportAvatarClothing(player,"local");
     appearancePlayer=player;appliedAppearance=wanted;
-    Log(options.female?"Local appearance applied: native G2 female body 5 / HUM_HEAD_BABE / face 137; no custom texture.":"Local appearance applied: Nameless Hero.");
+    Log("Local appearance applied: body="+std::string(AvatarBody(options.female))+" texture="+std::to_string(AvatarBodyTexture(options.female))+" female="+std::to_string(options.female));
 }
 
 void SeedUnionMenu() {
@@ -727,7 +757,7 @@ void Initialize() {
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.36 initialized; protocol=11; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.37 initialized; protocol=11; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -993,6 +1023,18 @@ CInvoke<int(__thiscall*)(oCItemContainer*,int,int)> originalItemTransfer(0x00709
 int __fastcall SharedItemTransfer(oCItemContainer* container,void*,int direction,int amount){
     if(orebound::engine::LootInterceptTransfer(container,direction,amount))return TRUE;
     return originalItemTransfer(container,direction,amount);
+}
+int __fastcall SharedContainerInput(oCItemContainer*,void*,int);
+CInvoke<int(__thiscall*)(oCItemContainer*,int)> originalContainerInput(0x0070A640,&SharedContainerInput);
+int __fastcall SharedContainerInput(oCItemContainer* container,void*,int key){
+    if(orebound::engine::LootInterceptNativeAction(container,key,"chest"))return TRUE;
+    return originalContainerInput(container,key);
+}
+int __fastcall SharedCorpseInput(oCNpcContainer*,void*,int);
+CInvoke<int(__thiscall*)(oCNpcContainer*,int)> originalCorpseInput(0x0070B6F0,&SharedCorpseInput);
+int __fastcall SharedCorpseInput(oCNpcContainer* container,void*,int key){
+    if(orebound::engine::LootInterceptNativeAction(container,key,"corpse"))return TRUE;
+    return originalCorpseInput(container,key);
 }
 unsigned char __cdecl CoopKeyCharacter(int scan,int shift,int alt);
 CInvoke<unsigned char(__cdecl*)(int,int,int)> originalKeyCharacter(0x004D2130,&CoopKeyCharacter);

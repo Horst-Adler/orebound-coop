@@ -17,8 +17,8 @@
     {
       "Id": "Sprint",
       "File": "Data/Sprint.vdf",
-      "Version": "Sprint 2.4.0 + bridge 1",
-      "SHA256": "9D06C29735810D9D07F551F9409ADE23494E983FF6F560C157855B82B8C77967",
+      "Version": "Sprint 2.4.0 + bridge 1 + binding guard",
+      "SHA256": "DCA1AD66B2E15A69682A951C6B0CCFC80C7734C95ECD531DD77E04C1228DAFFC",
       "BridgeMarker": "NINJA_SPRINT_ZK_BRIDGE_REV",
       "RequiresToolkit": true
     },
