@@ -12,7 +12,7 @@ The four own runtime files are:
 System/Autorun/OreboundCoop.dll
 System/Autorun/OreboundCoop_Menu.d
 System/Autorun/OreboundCoop_Npc.d
-Data/OreboundCoop_Core.vdf
+Data/OreboundCore.vdf
 ```
 
 Settings are stored in `System/OreboundCoop.ini`. The Core VDF contains our Ninja scripts, not a custom start screen.

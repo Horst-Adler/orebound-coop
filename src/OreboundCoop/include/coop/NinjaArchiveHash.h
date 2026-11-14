@@ -1,2 +1,2 @@
 #pragma once
-namespace orebound::extensions { inline constexpr const char* CoreArchiveHash="CE5894C1A09AA8EE15808FECF1AD2AD373331AE6D9ECCB1B5640A27FC04A16EF"; }
+namespace orebound::extensions { inline constexpr const char* CoreArchiveHash="76952944218338EA9D49AA8FC167A24A23648233833A277FEC48751DD65039DB"; }

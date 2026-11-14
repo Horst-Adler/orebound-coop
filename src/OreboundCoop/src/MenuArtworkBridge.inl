@@ -2,22 +2,26 @@ struct MenuArtworkState {
  zCMenu* menu=nullptr;zCView* outer=nullptr;zCView* inner=nullptr;
  zCTexture* originalOuter=nullptr;zCTexture* originalInner=nullptr;
 };
-MenuArtworkState menuArtwork;
+std::map<zCMenu*,MenuArtworkState> menuArtwork;
+void ReleaseSavedMenuArtwork(MenuArtworkState& state){
+ if(state.originalOuter)state.originalOuter->Release();
+ if(state.originalInner)state.originalInner->Release();
+}
 void ReleaseMenuArtworkCopies(){
- if(menuArtwork.originalOuter)menuArtwork.originalOuter->Release();
- if(menuArtwork.originalInner)menuArtwork.originalInner->Release();
- menuArtwork=MenuArtworkState{};
+ for(auto& entry:menuArtwork)ReleaseSavedMenuArtwork(entry.second);
+ menuArtwork.clear();
 }
 void RestoreMenuArtwork(zCMenu* menu){
- if(!menu||menuArtwork.menu!=menu)return;
+ const auto found=menuArtwork.find(menu);if(found==menuArtwork.end())return;
  // Called before native ScreenDone: both views are still owned by this menu.
- menuArtwork.outer->InsertBack(menuArtwork.originalOuter);
- menuArtwork.inner->InsertBack(menuArtwork.originalInner);
- ReleaseMenuArtworkCopies();
- diagnostics.Write(1,"menu_artwork_restore","menu=MENU_MAIN native_backgrounds_restored=1");
+ auto& state=found->second;
+ state.outer->InsertBack(state.originalOuter);
+ state.inner->InsertBack(state.originalInner);
+ ReleaseSavedMenuArtwork(state);menuArtwork.erase(found);
+ diagnostics.Write(1,"menu_artwork_restore",std::string("menu=")+menu->GetName().ToChar()+" native_backgrounds_restored=1");
 }
 void ApplyMenuArtwork(zCMenu* menu){
- if(!menu||menuArtwork.menu||systemDirectory.empty()||zCMenu::inGameMenu||_stricmp(menu->GetName().ToChar(),"MENU_MAIN")!=0)return;
+ if(!menu||menuArtwork.count(menu)||systemDirectory.empty()||zCMenu::inGameMenu)return;
  if(ReadIni("Interface","MenuArtwork","1")=="0")return;
  try{
   auto* menuParser=zCMenu::GetParser();if(!menuParser)return;
@@ -33,12 +37,12 @@ void ApplyMenuArtwork(zCMenu* menu){
   auto* outer=menu->m_pWindow;auto* inner=menu->m_pInnerWindow;
   MenuArtworkState state;state.menu=menu;state.outer=outer;state.inner=inner;
   state.originalOuter=outer->backTex;state.originalInner=inner->backTex;
-  if(state.originalOuter)state.originalOuter->AddRef();
-  if(state.originalInner)state.originalInner->AddRef();
-  menuArtwork=state;
+  auto& saved=menuArtwork.emplace(menu,state).first->second;
+  if(saved.originalOuter)saved.originalOuter->AddRef();
+  if(saved.originalInner)saved.originalInner->AddRef();
   outer->InsertBack(texture);
   if(!outer->backTex){RestoreMenuArtwork(menu);throw std::runtime_error("Artwork texture could not be loaded");}
   inner->InsertBack(static_cast<zCTexture*>(nullptr));
-  diagnostics.Write(1,"menu_artwork_apply",std::string("menu=MENU_MAIN mode=outgame menu_abi=1 texture=")+menuart::TextureName+" logos=native render=native_root_window");
+  diagnostics.Write(1,"menu_artwork_apply",std::string("menu=")+menu->GetName().ToChar()+" mode=outgame menu_abi=1 texture="+menuart::TextureName+" logos=native render=native_root_window");
  }catch(const std::exception& error){RestoreMenuArtwork(menu);diagnostics.Write(1,"menu_artwork_fallback",error.what());}
 }

@@ -17,7 +17,7 @@ text='// Generated from localization/ui.json; do not edit by hand.\n#pragma once
 target=base/'include/coop/LocalizationCatalogue.h'
 if not target.exists() or target.read_text(encoding='utf-8')!=text:target.write_text(text,encoding='utf-8',newline='\n')
 entries={e['id']:e for e in data['entries']}
-script=base/'ninja/Ninja/ZweiklangCore/Content/Bridge.d'
+script=base/'ninja/Ninja/OreboundCore/Content/Bridge.d'
 old=script.read_text(encoding='ascii')
 if data.get('script'):
  assignments=[]

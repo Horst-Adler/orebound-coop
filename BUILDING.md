@@ -18,7 +18,7 @@ python -m pip install zenkit==1.3.0.4
 
 Use `-MSBuildPath <MSBuild.exe>` and `-PythonPath <python.exe>` when needed. The full build first validates/generates `LocalizationCatalogue.h`, then builds the own Ninja VDF/hash header, then the DLL and technical suite. Preserve this order.
 
-Outputs: `build/alpha/G2NotR/OreboundCoop.dll`, `build/alpha/ninja/OreboundCoop_Core.vdf`, its manifest and `build/alpha/tests/OreboundNetworkTests.exe`. Run tests from the checkout root so synthetic fixtures resolve.
+Outputs: `build/alpha/G2NotR/OreboundCoop.dll`, `build/alpha/ninja/OreboundCore.vdf`, its manifest and `build/alpha/tests/OreboundNetworkTests.exe`. Run tests from the checkout root so synthetic fixtures resolve.
 
 Default tests include interactive DE/US keyboard checks. `--headless` explicitly skips only that check for a service session; the normal interactive run remains required. Real loopback UDP and file recovery tests do not execute Gothic. A successful build/static script check is not native Ninja/Union parser or two-PC gameplay acceptance.
 

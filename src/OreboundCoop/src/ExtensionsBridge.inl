@@ -23,7 +23,7 @@ bool ExtensionValidate(){
   const auto base=systemDirectory+"\\..\\Data\\";
   extensionCoreValid=ext::CoreReady(QuestInt("NINJA_VERSION"),QuestInt("Patch_ZweiklangCore_ABI"),
    ExtensionFunction("Patch_ZweiklangCore_Dispatch"),ExtensionInteger("Patch_ZweiklangCore_Command"),ExtensionInteger("Patch_ZweiklangCore_Value"),ExtensionInteger("Patch_ZweiklangCore_Result"),
-   ext::FileSha256(base+"OreboundCoop_Core.vdf")==ext::CoreArchiveHash&&ext::FileSha256(systemDirectory+"\\Ninja.dll")=="38CE2836A74227BEAF08C6972CD263389BC3D6F591BFF35AE812C83C6241CA8B");
+   ext::FileSha256(base+"OreboundCore.vdf")==ext::CoreArchiveHash&&ext::FileSha256(systemDirectory+"\\Ninja.dll")=="38CE2836A74227BEAF08C6972CD263389BC3D6F591BFF35AE812C83C6241CA8B");
   if(!extensionCoreValid)throw std::runtime_error("Ninja 4.1.16 / Orebound Core ABI 2 is missing or incompatible");
   ExtensionCall(ext::Command::Probe);
   const char* ids[]={"NINJA_ID_QUICKLOOT","NINJA_ID_SPRINT","NINJA_ID_TOOLKIT","NINJA_ID_PATCHMENU"};

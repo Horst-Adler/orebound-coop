@@ -16,6 +16,8 @@ if(-not $MSBuildPath -or -not(Test-Path -LiteralPath $MSBuildPath)){throw 'MSBui
 $source=Join-Path $root 'src\OreboundCoop'
 $logs=Join-Path $root 'build\logs';New-Item -ItemType Directory -Path $logs -Force|Out-Null
 if(-not $TestsOnly){
+    & $PythonPath (Join-Path $PSScriptRoot 'Test-NinjaPackage.py')
+    if($LASTEXITCODE -ne 0){throw 'Ninja discovery/catalogue regression failed.'}
     if($MenuArtworkSource){
         & $PythonPath (Join-Path $PSScriptRoot 'Build-MenuArtwork.py') --image $MenuArtworkSource
         if($LASTEXITCODE -ne 0){throw 'Own menu artwork conversion failed.'}

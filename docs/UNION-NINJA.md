@@ -1,6 +1,6 @@
 # Union/Ninja module contract
 
-Union remains the authority for networking, ownership, transactions, persistence and safety. Ninja 4.1.16 loads our own complementary script VDF. Its virtual patch root and `Patch_ZweiklangCore_*` symbols are legacy compatibility identifiers retained for existing saves; the runtime artifact is now `OreboundCoop_Core.vdf`.
+Union remains the authority for networking, ownership, transactions, persistence and safety. Ninja 4.1.16 loads our own complementary script VDF. Its virtual patch root and `Patch_ZweiklangCore_*` symbols are legacy compatibility identifiers retained for existing saves; the runtime artifact is now `OreboundCore.vdf`.
 
 ABI 2 verifies a scalar ABI constant, a zero-argument Dispatch function and scalar Command/Value/Result variables. Commands: 0 probe, 1 merchant preparation, 2 corpse rune cleanup, 3 authorized local quest XP (1..1,000,000), 4 local language (0 English / 1 German). Other commands/arguments fail closed. Result is reset before calls; command state and native instance bindings are restored afterwards. A script command alone cannot authorize a transfer.
 

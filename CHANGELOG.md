@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-alpha.35 — 2026-11-14
+
+- Correct Ninja discovery: use OreboundCore.vdf, a matching Ninja/OreboundCore directory and uppercase native VDFS catalogue entries. Retain existing script symbols and migrate the previous archive after backup.
+- Add 15 package discovery/catalogue regressions, including the previously ignored underscore name, wrong folder and mixed-case catalogue.
+- Use one opaque BC1 menu mip. Native startup exposed unsupported small compressed mips despite successful offline decoding.
+- Replace the separate pre-menu startup background with a stock-format RGB565 version of the same image; retain original logo textures.
+- Keep the background consistent in out-of-game submenus and quit confirmation using per-menu texture state; preserve the in-game pause view.
+- Preserve player configuration, saves and logs; 4,736 C++ assertions and 15 package regressions pass. Shared gameplay acceptance remains separate from the menu check.
+
 ## 0.1.0-alpha.34 — 2026-11-14
 
 - Add an optional Union/Ninja main-menu artwork contract. Use the existing native full-screen window for the image, clear only the inner window background, and retain original Gothic II logos and menu items.
