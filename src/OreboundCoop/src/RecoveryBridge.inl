@@ -1,5 +1,6 @@
 namespace rc=recovery;
 rc::Store recoveryStore;
+unsigned recoveryUnlockDepth=0;
 std::string recoveryDir,recoveryTimeline,recoveryPeerTimeline,recoveryError,recoveryUiTx;
 std::set<std::string> recoveryEffects;
 std::map<std::string,unsigned long long> recoveryQueries;
@@ -262,9 +263,9 @@ void RecoveryReceive(const std::vector<std::uint8_t>& bytes){
 // The original Gothic Unlock performs key/talent/lockpick tests. Record BEFORE
 // entering it; only a real locked->unlocked transition is sent to the host.
 rc::Tx RecoveryUnlockBegin(oCMobLockable* lock,oCNpc* who){
-    rc::Tx empty;if(lootNativeBypass||who!=player||!CombatConnected()||!lock->locked||!recoveryReady||(!HostCombat()&&recoveryPeerTimeline.empty()))return empty;
-    auto* chest=zDYNAMIC_CAST<oCMobContainer>(lock);if(!chest)return empty;
-    try{LootSource s;s.vob=s.chest=chest;s.identity=LootIdentity(chest);auto tx=RecoveryNew(rc::Action::Unlock,s,0,0);if(!recoveryStore.Put(tx,HostCombat()?rc::Role::Host:rc::Role::Owner))throw std::runtime_error("Cannot prepare native unlock");return tx;}
+    rc::Tx empty;if(recoveryUnlockDepth||lootNativeBypass||who!=player||!CombatConnected()||!lock->locked||!recoveryReady||(!HostCombat()&&recoveryPeerTimeline.empty()))return empty;
+    auto* chest=zDYNAMIC_CAST<oCMobContainer>(lock);if(!chest||!RecoveryPendingUnlock(chest).empty())return empty;
+    try{LootSource s;s.vob=s.chest=chest;s.identity=LootIdentity(chest);auto tx=RecoveryNew(rc::Action::Unlock,s,0,0);if(!recoveryStore.Put(tx,HostCombat()?rc::Role::Host:rc::Role::Owner))throw std::runtime_error("Cannot prepare native unlock");LootLog("unlock_prepare","tx="+tx.id+" key="+std::string(chest->keyInstance.ToChar())+" depth="+std::to_string(recoveryUnlockDepth));return tx;}
     catch(const std::exception& e){RecoveryFail(e.what());return empty;}
 }
 void RecoveryUnlockEnd(oCMobLockable* lock,rc::Tx tx){
@@ -275,7 +276,23 @@ void RecoveryUnlockEnd(oCMobLockable* lock,rc::Tx tx){
         recoveryEffects.insert(tx.id);
         if(wasHost){tx.decision=rc::Decision::Commit;if(!recoveryStore.Put(tx,rc::Role::Host))throw std::runtime_error("Cannot persist host unlock");}
         else {rc::Message m;m.op=rc::Op::Request;m.request=NextLootRequest();m.tx=tx;QueueRecovery(m);}
+        LootLog("unlock_transition","tx="+tx.id+" locked=0 host="+std::to_string(wasHost));
     }catch(const std::exception& e){RecoveryFail(e.what());}
+}
+std::string RecoveryPendingUnlock(oCMobContainer* chest){
+    if(!chest||HostCombat())return {};
+    const auto identity=LootIdentity(chest);
+    for(const auto& value:recoveryStore.Records()){
+        const auto& record=value.second;const auto& tx=record.tx;
+        if(record.role==rc::Role::Owner&&tx.action==rc::Action::Unlock&&tx.decision==rc::Decision::Prepared&&
+           tx.world==CurrentWorld()&&tx.ownerTimeline==recoveryTimeline&&tx.hostTimeline==recoveryPeerTimeline&&
+           tx.source.name==identity.name&&tx.source.position==identity.position)return tx.id;
+    }
+    return {};
+}
+int RecoveryUnlockDecision(const std::string& id){
+    const auto* record=recoveryStore.Find(id);
+    return record?static_cast<int>(record->tx.decision):3;
 }
 void RecoveryFrame(){
     if(recoveryLoading||recoverySaveSlot>=0||!player||!ogame||!ogame->GetWorld()||!recoveryError.empty())return;

@@ -25,6 +25,7 @@
 #include "coop/Recovery.h"
 #include "coop/NativeSave.h"
 #include "coop/WorldProtocol.h"
+#include "coop/MechanismProtocol.h"
 #include "coop/SessionProtocol.h"
 #include "coop/CavalornPolicy.h"
 #include "coop/QolPolicy.h"
@@ -222,6 +223,12 @@ void LootReceive(const std::vector<std::uint8_t>&);
 void LootReset();
 bool RecoveryTransfer(oCItemContainer*,int);
 bool RecoveryCanLoot();
+std::string RecoveryPendingUnlock(oCMobContainer*);
+int RecoveryUnlockDecision(const std::string&);
+void MechanismReset();
+void MechanismFrame(unsigned long long);
+void MechanismReceive(const std::vector<std::uint8_t>&);
+void WorldTalkFrame(unsigned long long);
 void RecoveryReceive(const std::vector<std::uint8_t>&);
 void RecoverySessionReset();
 struct NpcBinding;
@@ -290,6 +297,7 @@ void QolNotify(unsigned,unsigned);
 #include "LootBridge.inl"
 #include "RecoveryBridge.inl"
 #include "WorldBridge.inl"
+#include "MechanismBridge.inl"
 #include "CavalornBridge.inl"
 #include "SessionBridge.inl"
 #include "ExtensionsBridge.inl"
@@ -531,7 +539,7 @@ void Start(bool asHost) {
     if(!ExtensionValidate())return;
     const net::Compatibility compatibility{kEngine, net::HashString(contentId), net::HashString(sessionWorld)};
     diagnostics.Role(asHost?"HOST":"CLIENT");
-    diagnostics.Write(1,"session_start","name="+options.name+" host="+hostAddress+" port="+std::to_string(port)+" world="+sessionWorld+" content="+contentId+" protocol=11");
+    diagnostics.Write(1,"session_start","name="+options.name+" host="+hostAddress+" port="+std::to_string(port)+" world="+sessionWorld+" content="+contentId+" protocol=12");
     const bool started = asHost ? network.StartHost(port, compatibility, Now(),hostAddress) :
                                  network.Connect(hostAddress, port, compatibility, Now(),options.client);
     Log(std::string("Session role=")+(asHost?"Host":"Client")+" bind="+(asHost?hostAddress:options.client));
@@ -757,7 +765,7 @@ void Initialize() {
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.38 initialized; protocol=11; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.39 initialized; protocol=12; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -806,11 +814,13 @@ void Frame() {
             network.SendSnapshot(snapshot, now);
             lastSend = now;
         }
+        WorldTalkFrame(now);
         CombatFrame(now,elapsed);
         CharacterFrame(now);
         LootFrame(now);
         ApplyRemote(now, elapsed);
         WorldFrame(now);
+        MechanismFrame(now);
         if(!combatFailure.empty()){const auto reason=combatFailure;Leave(reason.c_str());}
     } else if (remote) RemoveProxy();
     QolFrame(now);
@@ -857,6 +867,8 @@ void BeforeLoad() {
     questCheckedParser=nullptr;questCheckedInfoManager=nullptr;
     freshGamePending=false;loading = true;
     Leave("Loading: presence session closed; reconnect after loading.");
+    // Release our old hero/transformation references BEFORE native world disposal.
+    CharacterClearForms();
     QolReset();
 }
 void BeforeNewGame(){BeforeLoad();CharacterNewGame();freshGamePending=true;recoveryTimeline.clear();recoveryEffects.clear();recoveryReady=false;recoveryLastReplay=0;recoveryLastWorld.clear();if(recoveryStoreReady){recoveryError.clear();recoveryBlocked=false;}}
@@ -949,7 +961,23 @@ CInvoke<void(__thiscall*)(oCInfoManager*)> originalInfoManagerDestroy(0x00702720
 void __fastcall CoopInfoManagerDestroy(oCInfoManager* manager,void*){using namespace orebound::engine;if(manager==questCheckedInfoManager){questOriginalConditions.clear();questCheckedInfoManager=nullptr;questCheckedParser=nullptr;}originalInfoManagerDestroy(manager);}
 void __fastcall SharedUnlock(oCMobLockable*,void*,oCNpc*,int);
 CInvoke<void(__thiscall*)(oCMobLockable*,oCNpc*,int)> originalUnlock(0x00724A70,&SharedUnlock);
-void __fastcall SharedUnlock(oCMobLockable* lock,void*,oCNpc* who,int mode){auto tx=orebound::engine::RecoveryUnlockBegin(lock,who);originalUnlock(lock,who,mode);orebound::engine::RecoveryUnlockEnd(lock,tx);}
+void __fastcall SharedUnlock(oCMobLockable* lock,void*,oCNpc* who,int mode){
+    using namespace orebound::engine;
+    auto tx=RecoveryUnlockBegin(lock,who);++recoveryUnlockDepth;
+    originalUnlock(lock,who,mode);--recoveryUnlockDepth;RecoveryUnlockEnd(lock,tx);
+}
+void __fastcall SharedLockInteraction(oCMobLockable*,void*,oCNpc*,int,int,int,int,int);
+CInvoke<void(__thiscall*)(oCMobLockable*,oCNpc*,int,int,int,int,int)> originalLockInteraction(0x00723CF0,&SharedLockInteraction);
+void __fastcall SharedLockInteraction(oCMobLockable* lock,void*,oCNpc* who,int a,int b,int c,int d,int e){
+    using namespace orebound::engine;
+    // The native key branch writes locked directly, bypassing Unlock().
+    if(who==player&&CombatConnected()&&!RecoveryCanLoot())return;
+    const bool key=who==player&&lock->locked&&lock->keyInstance.Length()>0&&who->IsInInv(lock->keyInstance,1);
+    auto tx=key?RecoveryUnlockBegin(lock,who):orebound::recovery::Tx{};
+    const bool capturing=!tx.id.empty();
+    if(capturing)++recoveryUnlockDepth;originalLockInteraction(lock,who,a,b,c,d,e);if(capturing)--recoveryUnlockDepth;
+    RecoveryUnlockEnd(lock,tx);
+}
 // Full damage entry point: blocked hits never reach scripts, HP, knockback or
 // the hit-stage observer. Network replay deliberately forwards exactly once.
 void __fastcall SharedDamage(oCNpc*,void*,oCNpc::oSDamageDescriptor&);
@@ -975,6 +1003,13 @@ int __fastcall SharedAssessTalk(oCNpc* npc,void*,oCNpc* other){
     const int result=originalAssessTalk(npc,other);
     if(leased){CombatLog("dialog_request_result","npc="+std::string(npc->GetObjectName().ToChar())+" result="+std::to_string(result));if(!result)worldTalkLease.Clear();}
     return result;
+}
+int __fastcall SharedProcessInfos(oCNpc*,void*,oCMsgConversation*);
+CInvoke<int(__thiscall*)(oCNpc*,oCMsgConversation*)> originalProcessInfos(0x0075A680,&SharedProcessInfos);
+int __fastcall SharedProcessInfos(oCNpc* npc,void*,oCMsgConversation* message){
+    using namespace orebound::engine;
+    if(npc==player&&message){auto* target=zDYNAMIC_CAST<oCNpc>(message->target);if(!target)target=player->GetFocusNpc();WorldBeginTalk(target,player);}
+    return originalProcessInfos(npc,message);
 }
 void __fastcall SharedFocus(oCNpc*,void*,zCVob*);
 CInvoke<void(__thiscall*)(oCNpc*,zCVob*)> originalFocus(0x00732B60,&SharedFocus);
@@ -1013,10 +1048,44 @@ void __fastcall SharedLoot(oCNpc* npc,void*){
     if(npc==player&&LootBeforeCorpseOpen())return;
     originalLoot(npc);
 }
+void __fastcall SharedMobTrigger(oCMobInter*,void*,zCVob*,zCVob*);
+void __fastcall SharedMobUntrigger(oCMobInter*,void*,zCVob*,zCVob*);
+CInvoke<void(__thiscall*)(oCMobInter*,zCVob*,zCVob*)> originalMobTrigger(0x0071E7D0,&SharedMobTrigger);
+CInvoke<void(__thiscall*)(oCMobInter*,zCVob*,zCVob*)> originalMobUntrigger(0x0071EAC0,&SharedMobUntrigger);
+void __fastcall SharedMobTrigger(oCMobInter* mob,void*,zCVob* sender,zCVob* actor){if(!orebound::engine::MechanismTrigger(mob,sender,actor,true))originalMobTrigger(mob,sender,actor);}
+void __fastcall SharedMobUntrigger(oCMobInter* mob,void*,zCVob* sender,zCVob* actor){if(!orebound::engine::MechanismTrigger(mob,sender,actor,false))originalMobUntrigger(mob,sender,actor);}
+void __fastcall SharedMoverTrigger(zCMover*,void*,zCVob*,zCVob*);
+void __fastcall SharedMoverUntrigger(zCMover*,void*,zCVob*,zCVob*);
+void __fastcall SharedMoverAdvance(zCMover*,void*);
+void __fastcall SharedMoverTick(zCMover*,void*);
+CInvoke<void(__thiscall*)(zCMover*,zCVob*,zCVob*)> originalMoverTrigger(0x00613080,&SharedMoverTrigger);
+CInvoke<void(__thiscall*)(zCMover*,zCVob*,zCVob*)> originalMoverUntrigger(0x00613170,&SharedMoverUntrigger);
+CInvoke<void(__thiscall*)(zCMover*)> originalMoverAdvance(0x00611D90,&SharedMoverAdvance);
+CInvoke<void(__thiscall*)(zCMover*)> originalMoverTick(0x00612F80,&SharedMoverTick);
+void __fastcall SharedMoverTrigger(zCMover* m,void*,zCVob* s,zCVob* a){if(!orebound::engine::MechanismMirror(m))originalMoverTrigger(m,s,a);}
+void __fastcall SharedMoverUntrigger(zCMover* m,void*,zCVob* s,zCVob* a){if(!orebound::engine::MechanismMirror(m))originalMoverUntrigger(m,s,a);}
+void __fastcall SharedMoverAdvance(zCMover* m,void*){if(!orebound::engine::MechanismMirror(m))originalMoverAdvance(m);}
+void __fastcall SharedMoverTick(zCMover* m,void*){if(!orebound::engine::MechanismMirror(m))originalMoverTick(m);}
 void __fastcall SharedChestOpen(oCMobContainer*,void*,oCNpc*);
 CInvoke<void(__thiscall*)(oCMobContainer*,oCNpc*)> originalChestOpen(0x00726500,&SharedChestOpen);
 void __fastcall SharedChestOpen(oCMobContainer* chest,void*,oCNpc* who){
     if(!orebound::engine::LootBeforeChestOpen(chest,who))originalChestOpen(chest,who);
+}
+int __fastcall SharedGameInput(CGameManager*,void*,int);
+void __fastcall SharedGameDone(oCGame*,void*);
+CInvoke<void(__thiscall*)(oCGame*)> originalGameDone(0x006C0D80,&SharedGameDone);
+void __fastcall SharedGameDone(oCGame* game,void*){
+    using namespace orebound::engine;
+    if(game==ogame&&diagnosticsReady){
+        Leave("World teardown: release plugin references before native disposal.");
+        CharacterClearForms();
+    }
+    originalGameDone(game);
+}
+CInvoke<int(__thiscall*)(CGameManager*,int)> originalGameInput(0x0042AD50,&SharedGameInput);
+int __fastcall SharedGameInput(CGameManager* manager,void*,int key){
+    if(orebound::engine::LootCancelInput(key))return TRUE;
+    return originalGameInput(manager,key);
 }
 int __fastcall SharedItemTransfer(oCItemContainer*,void*,int,int);
 CInvoke<int(__thiscall*)(oCItemContainer*,int,int)> originalItemTransfer(0x00709F40,&SharedItemTransfer);
@@ -1063,6 +1132,8 @@ void __fastcall MenuInit(zCMenu* menu,void*) {
     // mutation in C++; only seed our own option section before native init.
     if(IsCoopMenu(menu))orebound::engine::UnionMenuEnter();
     originalMenuInit(menu);
+    if(menu&&_stricmp(menu->GetName().ToChar(),"MENU_MAIN")==0)
+        orebound::engine::Log("Main menu context: game_running="+std::to_string(gameMan&&gameMan->IsGameRunning())+" native_ingame="+std::to_string(zCMenu::inGameMenu)+" exit_session="+std::to_string(gameMan?gameMan->exitSession:-1));
     orebound::engine::ApplyMenuArtwork(menu);
     orebound::engine::LocalizeUnionMenu(menu);
     if(IsCoopMenu(menu)){

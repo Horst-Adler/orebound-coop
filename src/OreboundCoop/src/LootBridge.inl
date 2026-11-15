@@ -15,6 +15,27 @@ unsigned long long lootClientWait=0,lootLastKeepAlive=0,lootLastTraffic=0;
 unsigned lootClockSkews=0;
 bool lootNativeBypass=false,clientLootShown=false,clientLootClosing=false;
 bool clientQuickLoot=false;
+oCMobContainer* clientDeferredChest=nullptr;
+std::string clientDeferredUnlock;
+unsigned long long clientDeferredAt=0,lootEscapeUntil=0;
+std::set<unsigned> lootCancelledOpens;
+void LootLog(const char*,const std::string&);
+void ClearDeferredChest(){if(clientDeferredChest)clientDeferredChest->Release();clientDeferredChest=nullptr;clientDeferredUnlock.clear();clientDeferredAt=0;}
+void AbortChestInteraction(oCMobContainer* chest){
+    if(!chest||!player||player->interactMob!=chest)return;
+    // Close() alone only closes an inventory. StopInteraction() also releases
+    // the native mob slot/animation when an async request was denied before UI.
+    if(auto* em=chest->GetEM(FALSE))for(int i=em->GetNumMessages()-1;i>=0;--i){
+        auto* msg=zDYNAMIC_CAST<oCMobMsg>(em->GetEventMessage(i));if(msg&&msg->npc==player)em->Delete(msg);
+    }
+    if(auto* em=player->GetEM(FALSE))for(int i=em->GetNumMessages()-1;i>=0;--i){
+        auto* msg=zDYNAMIC_CAST<oCMsgManipulate>(em->GetEventMessage(i));if(msg&&msg->subType==oCMsgManipulate::EV_USEMOB&&msg->targetVob==chest)em->Delete(msg);
+    }
+    chest->StopInteraction(player);
+    if(player->interactMob==chest)player->SetInteractMob(nullptr);
+    player->StandUp(TRUE,FALSE);
+    LootLog("loot_interaction_abort","chest="+std::string(chest->GetObjectName().ToChar())+" inventory_open=0");
+}
 
 void ReleaseLootSource(LootSource& source){if(source.identity.kind==lo::Source::Merchant&&source.corpse){auto it=npcByPointer.find(source.corpse);if(it!=npcByPointer.end()){auto* model=zDYNAMIC_CAST<zCModel>(source.corpse->GetVisual());if(model)model->aniTransScale=it->second->rootScale;}}if(source.vob)source.vob->Release();source=LootSource{};}
 void ReleaseLootItems(std::vector<LootItemRef>& items){for(auto& i:items)if(i.item)i.item->Release();items.clear();}
@@ -90,13 +111,18 @@ void CloseClientLootUI(){
     if(player){
         // A denied async chest request must also release the interaction even
         // though the inventory window was never opened.
-        if(clientLootSource.chest&&(LootUIOpen(clientLootSource)||player->interactMob==clientLootSource.chest))clientLootSource.chest->Close(player);
+        if(clientLootSource.chest){
+            if(LootUIOpen(clientLootSource))clientLootSource.chest->Close(player);
+            AbortChestInteraction(clientLootSource.chest);
+        }
         else if(clientLootSource.corpse&&clientLootShown&&LootUIOpen(clientLootSource)){if(auto* ui=LootUI(clientLootSource))ui->Close();oCNpc::game_mode=0;player->CloseInventory();}
     }
-    lootNativeBypass=false;clientLootShown=false;
+    if(clientDeferredChest)AbortChestInteraction(clientDeferredChest);
+    ClearDeferredChest();lootNativeBypass=false;clientLootShown=false;
 }
 void ClearClientLoot(){CloseClientLootUI();ReleaseLootItems(clientLootItems);ReleaseLootSource(clientLootSource);clientOpenRequest=clientLease=clientLootRevision=clientPendingTake=0;clientLootClosing=false;clientQuickLoot=false;lootClientWait=0;lootSnapshot=lo::Snapshot{};}
 void LootReset(){
+    lootCancelledOpens.clear();lootEscapeUntil=0;
     RecoverySessionReset();
     if(clientPendingTake||lootLedger.HasUnapplied())LootLog("loot_recovery_pending","Session ended with transfer in flight; durable transaction decision and save checkpoint will be reconciled on resume.");
     ClearClientLoot();ReleaseLootItems(guestLootItems);ReleaseLootSource(guestLootSource);lootLedger=lo::Ledger{};lootOutbox.clear();lootApplied.clear();lootRequest=0;lootLastKeepAlive=lootLastTraffic=0;lootClockSkews=0;
@@ -127,6 +153,13 @@ bool LootBeforeChestOpen(oCMobContainer* chest,oCNpc* who){
     if(who==player&&!lootNativeBypass&&!RecoveryCanLoot())return true;
     if(lootNativeBypass||!CombatConnected()||who!=player)return false;
     if(HostCombat()){if(guestLootSource.vob==chest){notice=Ui("ui_7b2d83e77b85");return true;}return false;}
+    const auto unlocking=RecoveryPendingUnlock(chest);
+    if(!unlocking.empty()){
+        if(clientDeferredChest&&clientDeferredChest!=chest)return true;
+        if(!clientDeferredChest){clientDeferredChest=chest;chest->AddRef();clientDeferredUnlock=unlocking;clientDeferredAt=Now();
+            LootLog("loot_open_deferred","tx="+unlocking+" reason=await_host_unlock");}
+        return true;
+    }
     if(chest->locked)return false;
     LootSource s;s.vob=s.chest=chest;s.identity=LootIdentity(chest);return RequestClientLoot(s);
 }
@@ -254,7 +287,13 @@ void LootReceive(const std::vector<std::uint8_t>& bytes){
         default:LootLog("loot_invalid","Wrong guest message direction");return;
         }
     }
-    if(m.op==lo::Op::Denied){if(m.request==clientOpenRequest){notice=LootStatusText(m.status);ClearClientLoot();}return;}
+    if(lootCancelledOpens.count(m.request)){
+        if(m.op==lo::Op::Begin){lo::Message close;close.op=lo::Op::Close;close.request=NextLootRequest();close.lease=m.lease;QueueLoot(close);}
+        LootLog("loot_cancelled_reply","request="+std::to_string(m.request)+" op="+std::to_string(static_cast<unsigned>(m.op)));
+        if(m.op==lo::Op::Denied||(m.op==lo::Op::Begin&&m.total==0)||(m.op==lo::Op::Page&&m.index+m.entries.size()>=m.total))lootCancelledOpens.erase(m.request);
+        return;
+    }
+    if(m.op==lo::Op::Denied){if(m.request==clientOpenRequest){notice=LootStatusText(m.status);LootLog("loot_open_denied","request="+std::to_string(m.request)+" status="+std::to_string(static_cast<unsigned>(m.status)));ClearClientLoot();lootEscapeUntil=Now()+250;}return;}
     if(m.op==lo::Op::Begin){if(m.request!=clientOpenRequest||clientLease||!lootSnapshot.Begin(m)){combatFailure="Invalid loot snapshot begin";return;}clientLease=m.lease;clientLootRevision=m.revision;if(lootSnapshot.Complete()&&!ApplyLootSnapshot())clientLootClosing=true;return;}
     if(m.op==lo::Op::Page){if(!lootSnapshot.Page(m)){combatFailure="Incomplete/out-of-order loot snapshot";return;}if(lootSnapshot.Complete()&&!ApplyLootSnapshot())clientLootClosing=true;return;}
     if(m.op!=lo::Op::Result){LootLog("loot_invalid","Wrong host message direction");return;}
@@ -280,8 +319,34 @@ void LootReceive(const std::vector<std::uint8_t>& bytes){
     if(!LootJournal("client_applied",m)){combatFailure="Loot applied but receipt journal failed";return;}
     m.op=lo::Op::Applied;QueueLoot(m);LootLog("loot_applied","request="+std::to_string(m.request)+" instance="+std::to_string(m.item.instance)+" amount="+std::to_string(m.item.amount));
 }
+bool CancelClientLoot(const char* reason){
+    if(!clientLootSource.vob&&!clientDeferredChest)return false;
+    if(clientPendingTake){clientLootClosing=true;return true;}
+    if(clientOpenRequest){if(lootCancelledOpens.size()>=128){combatFailure="Cancelled loot request limit reached";return true;}lootCancelledOpens.insert(clientOpenRequest);}
+    if(clientLease){lo::Message close;close.op=lo::Op::Close;close.request=NextLootRequest();close.lease=clientLease;QueueLoot(close);}
+    LootLog("loot_cancel",std::string("reason=")+reason+" request="+std::to_string(clientOpenRequest));
+    ClearClientLoot();lootEscapeUntil=Now()+250;return true;
+}
+bool LootCancelInput(int key){
+    if(key!=1||!CombatConnected()||HostCombat()||zCMenu::GetActive())return false;
+    if(Now()<lootEscapeUntil)return true;
+    return CancelClientLoot("escape");
+}
 void LootFrame(unsigned long long now){
     if(!CombatConnected())return;
+    if(!HostCombat()&&clientDeferredChest){
+        const int decision=RecoveryUnlockDecision(clientDeferredUnlock);
+        const auto gate=mechanism::AfterUnlock(decision,timing::Elapsed(now,clientDeferredAt)>10000,player&&player->interactMob==clientDeferredChest,clientDeferredChest->locked!=0);
+        if(gate!=mechanism::OpenGate::Wait){
+            auto* chest=clientDeferredChest;chest->AddRef();
+            const bool open=gate==mechanism::OpenGate::Open;
+            if(!open)AbortChestInteraction(chest);
+            ClearDeferredChest();
+            if(open){LootSource s;s.vob=s.chest=chest;s.identity=LootIdentity(chest);RequestClientLoot(s);}
+            else LootLog("loot_open_cancelled","reason=unlock_denied_or_interaction_ended decision="+std::to_string(decision));
+            chest->Release();
+        }
+    }
     if(!HostCombat()&&clientLootSource.vob){
         if(clientLootShown&&!clientQuickLoot&&!LootUIOpen(clientLootSource))clientLootClosing=true;
         if(lootClientWait&&timing::Elapsed(now,lootClientWait)>10000){combatFailure="Loot operation timed out; inspect inventory journal before retry";return;}

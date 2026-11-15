@@ -38,7 +38,7 @@ void CharacterHoldForm(oCNpc* npc){
     CharacterPruneForms();if(characterForms.size()>=32){combatFailure="Character form safety limit reached; reload a trusted save";return;}
     npc->AddRef();characterForms.push_back(npc);CombatLog("character_form","forms="+std::to_string(characterForms.size())+" instance="+std::to_string(npc->GetInstance()));
 }
-void CharacterClearForms(){for(auto* npc:characterForms)npc->Release();characterForms.clear();characterHumanRoot=nullptr;appearancePlayer=nullptr;appliedAppearance=-1;characterProgressKey.clear();characterMovementKey.clear();}
+void CharacterClearForms(){if(!characterForms.empty())CombatLog("character_forms_release","count="+std::to_string(characterForms.size()));for(auto* npc:characterForms)npc->Release();characterForms.clear();characterHumanRoot=nullptr;appearancePlayer=nullptr;appliedAppearance=-1;characterProgressKey.clear();characterMovementKey.clear();}
 void CharacterSessionReset(){
     if(characterGuestDepth){CharacterCounters(characterCounterBank.host);if(parser&&player)parser->SetInstance(zSTRING("HERO"),player);}
     for(auto& e:characterWitnessBanks)if(e.second.guest){for(unsigned i=0;i<ch::PersonalAiv.size();++i)e.first->aiscriptvars[ch::PersonalAiv[i]]=e.second.hostAiv[i];e.first->knowsPlayer=e.second.hostKnown;}

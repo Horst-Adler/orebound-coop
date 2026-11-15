@@ -4,7 +4,7 @@
 
 Updates preserve existing character profiles, saves and inventory journals.
 
-**Current development build: 0.1.0-alpha.38 · protocol 11 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
+**Current development build: 0.1.0-alpha.39 · protocol 12 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
 
 [Install](INSTALLATION.md) · [Build](BUILDING.md) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Languages](docs/LOCALIZATION.md) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
@@ -43,3 +43,5 @@ Direct player trading, additional appearances, starter armor, pings and map note
 Own code is AGPL-3.0-only; see [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md). This repository contains own source, build/install tools, documentation and synthetic test fixtures. It does not contain original game data, external SDK binaries, transformed third-party mods, private diagnostics or the productive work website. No public binary release is assumed.
 
 [Alpha.38: native menu settings](docs/ALPHA-38.md). Up/Down selects a settings row; Left/Right changes the value; Save settings persists it.
+
+[Alpha.39: native interaction recovery and shared gates](docs/ALPHA-39.md). Both peers must update to protocol 12. Native key-chest, repeated dialogue and gate acceptance remain pending.

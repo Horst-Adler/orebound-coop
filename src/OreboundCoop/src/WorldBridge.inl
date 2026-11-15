@@ -16,29 +16,74 @@ std::string worldGroundPending;
 ws::TalkLease worldTalkLease;
 
 void QueueWorld(co::Bytes bytes){if(bytes.size()>net::MaximumDatagramBytes-net::ProtocolHeaderBytes||worldOutbox.size()>=8192){combatFailure="World lifecycle queue limit reached";return;}worldOutbox.push_back(std::move(bytes));}
+void WorldClearTalk();
 void WorldReset(){
+    WorldClearTalk();
+    MechanismReset();
     worldConstructing=true;
     worldTalkLease.Clear();
     for(auto& entry:groundBindings){if(entry->owned&&entry->item->homeWorld)entry->item->RemoveVobFromWorld();entry->item->Release();}
     worldOutbox.clear();groundBindings.clear();groundByPointer.clear();groundById.clear();npcProbes.clear();npcProbeTargets.clear();npcProbeSerial=0;nextGroundId=1;groundCursor=0;
     worldDualPasses=worldTimersRestored=worldGuestTicks=0;lastWorldScan=lastWorldSend=lastWorldLog=worldConnectedAt=0;worldGroundPending.clear();worldTradeManager=nullptr;worldTradeReady=false;worldConstructing=false;
 }
+bool WorldNativeTalkState(oCNpc* npc){
+    if(!npc)return false;
+    const int index=parser?parser->GetIndex(zSTRING("ZS_TALK")):-1;
+    auto talk=[&](const TNpcAIState& s){return s.valid&&((index>=0&&s.index==index)||s.index==NPC_AISTATE_ANSWER);};
+    return talk(npc->state.curState)||talk(npc->state.nextState);
+}
 bool WorldLocalTalksTo(oCNpc* npc){
     if(!npc||!player)return false;
-    if(player->talkOther==npc||npc->talkOther==player)return true;
-    auto& info=oCInformationManager::GetInformationManager();if(!info.IsDone&&info.Npc==npc&&info.Player==player)return true;
+    auto& info=oCInformationManager::GetInformationManager();
+    if(!info.IsDone&&info.Npc==npc&&info.Player==player)return true;
+    if(HostCombat())return player->talkOther==npc||npc->talkOther==player;
     const auto binding=npcByPointer.find(npc);
     return binding!=npcByPointer.end()&&worldTalkLease.Allows(binding->second->id,Now());
 }
 bool WorldBeginTalk(oCNpc* npc,oCNpc* other){
     if(!CombatConnected()||HostCombat()||other!=player||!npc||npc==player||npc==PartnerNpc()||npc->IsDead()||npc->IsUnconscious())return false;
     const auto it=npcByPointer.find(npc);if(it==npcByPointer.end()||!it->second->id)return false;
+    if(worldTalkLease.npc==it->second->id&&worldTalkLease.Allows(it->second->id,Now()))return false;
     auto& entry=*it->second;worldTalkLease.Begin(entry.id,Now());
     if(auto* model=npc->GetModel()){model->aniTransScale=entry.rootScale;model->doVobRot=entry.originalRotation;}
-    npc->SetSleepingMode(zVOB_AWAKE);
-    CombatLog("dialog_request","npc="+std::string(npc->GetObjectName().ToChar())+" id="+std::to_string(entry.id)+" guest_ai_lease_ms=3000");return true;
+    npc->SetPhysicsEnabled(entry.originalPhysics);npc->SetSleepingMode(zVOB_AWAKE);
+    CombatLog("dialog_request","npc="+std::string(npc->GetObjectName().ToChar())+" id="+std::to_string(entry.id)+" phase=requested");return true;
 }
-unsigned WorldLocalInteraction(){if(!player)return 0;auto* npc=player->talkOther;auto& info=oCInformationManager::GetInformationManager();if(!npc&&!info.IsDone&&info.Player==player)npc=info.Npc;auto it=npcByPointer.find(npc);if(it!=npcByPointer.end())return it->second->id;return worldTalkLease.Allows(worldTalkLease.npc,Now())?worldTalkLease.npc:0;}
+void WorldTalkFrame(unsigned long long now){
+    if(!CombatConnected()||HostCombat())return;
+    auto& info=oCInformationManager::GetInformationManager();
+    if(!worldTalkLease.npc&&!info.IsDone&&info.Player==player)WorldBeginTalk(info.Npc,player);
+    auto binding=npcById.find(worldTalkLease.npc);if(binding==npcById.end())return;
+    auto* npc=binding->second->npc;
+    const bool active=!info.IsDone&&!info.IsWaitingForEnd&&info.Npc==npc&&info.Player==player;
+    const bool ending=WorldNativeTalkState(npc)||npc->talkOther==player||player->talkOther==npc;
+    auto* em=npc->GetEM(FALSE);const int queued=em?em->GetNumMessages():0;
+    const auto old=worldTalkLease.phase;const auto id=worldTalkLease.npc;
+    worldTalkLease.Observe(now,active,ending,queued>0);
+    if(!active&&worldTalkLease.phase==ws::TalkLease::Phase::Finishing&&worldTalkLease.Expired(now)){
+        // A stranded talk state must not keep local NPC AI released indefinitely.
+        // Never terminate an active information/trade view or an unrelated state.
+        if(info.IsDone){if(WorldNativeTalkState(npc))npc->state.ClearAIState();if(npc->talkOther==player||player->talkOther==npc)npc->StopTalkingWith();worldTalkLease.Clear();}
+        else {worldTalkLease.until=now+1000;}
+        CombatLog("dialog_cleanup_watchdog","id="+std::to_string(id)+" info_done="+std::to_string(info.IsDone)+" queue="+std::to_string(queued));
+    }
+    if(old!=worldTalkLease.phase)CombatLog("dialog_phase","id="+std::to_string(id)+" phase="+std::to_string(static_cast<int>(worldTalkLease.phase))+" native_state="+std::to_string(npc->state.GetState())+" info_done="+std::to_string(info.IsDone)+" waiting_end="+std::to_string(info.IsWaitingForEnd)+" queued="+std::to_string(queued));
+}
+void WorldClearTalk(){
+    if(worldTalkLease.npc){
+        auto& info=oCInformationManager::GetInformationManager();
+        auto it=npcById.find(worldTalkLease.npc);
+        if(it!=npcById.end()&&info.Npc==it->second->npc&&info.Player==player&&!info.IsDone)info.Exit();
+        CombatLog("dialog_release","id="+std::to_string(worldTalkLease.npc)+" reason=session_reset");
+    }
+    worldTalkLease.Clear();
+}
+unsigned WorldLocalInteraction(){
+    if(!player)return 0;auto& info=oCInformationManager::GetInformationManager();
+    auto* npc=!info.IsDone&&info.Player==player?info.Npc:player->talkOther;
+    auto it=npcByPointer.find(npc);if(it!=npcByPointer.end())return it->second->id;
+    return worldTalkLease.Allows(worldTalkLease.npc,Now())?worldTalkLease.npc:0;
+}
 bool WorldTradePaused(oCNpc* npc){
     if(!HostCombat()||!npc||WorldLocalTalksTo(npc))return false;
     if(guestLootSource.corpse==npc&&guestLootSource.identity.kind==lo::Source::Merchant)return true;

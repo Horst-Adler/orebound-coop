@@ -244,7 +244,7 @@ void CombatFrame(unsigned long long now,float elapsed){
         }
     }
     UpdateCombatActor();
-    for(int i=0;i<64&&network.ConsumeEvent(bytes);++i){if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
+    for(int i=0;i<64&&network.ConsumeEvent(bytes);++i){if(!bytes.empty()&&(bytes[0]==52||bytes[0]==53)){MechanismReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
     while(!deferredHits.empty()){
         auto& hit=deferredHits.front();if(!ExecuteCombatHit(hit.damage)){if(timing::Elapsed(now,hit.at)>3000)combatFailure="Combat target not mapped before event timeout";break;}deferredHits.pop_front();
     }

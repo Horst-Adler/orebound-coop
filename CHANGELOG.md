@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.39
+
+- Capture direct native key unlock and wait for durable host confirmation before opening client inventory.
+- End denied/cancelled chest interactions and quarantine late replies without duplicating transfers.
+- Preserve native dialogue finishing work before returning NPCs to mirror AI; add bounded lifecycle diagnostics.
+- Release held character forms before native load/disposal.
+- Add bounded host-authoritative simple gate-switch and keyframe mover replication; protocol 12.
+- Keep accepted body resources and save/journal formats unchanged. Native gameplay acceptance remains open.
+
+
 ## 0.1.0-alpha.38
 
 - Restore native Friendly fire and Language row selection and logical navigation order.

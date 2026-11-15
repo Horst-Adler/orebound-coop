@@ -1,0 +1,53 @@
+void TestMechanismsAndInteractions(){
+    namespace m=orebound::mechanism;namespace w=orebound::worldsync;
+    m::State button;button.op=m::Op::Activate;button.request=1;button.target="EVT_XARDAS_SECRET_01";
+    button.anchor={30257.15f,5154.08f,-14557.68f};button.state=1;
+    Check(m::Valid(button),"unnamed tower switch identified by target and anchor");
+    auto bytes=m::Encode(button);m::State decoded;
+    Check(m::Decode(bytes,decoded)&&decoded.target==button.target&&decoded.request==1,"switch activation codec");
+    for(std::size_t n=0;n<bytes.size();++n){auto cut=bytes;cut.resize(n);Check(!m::Decode(cut,decoded),"truncated switch request rejected");}
+    auto extra=bytes;extra.push_back(0);Check(!m::Decode(extra,decoded),"trailing mechanism payload rejected");
+    Check(m::CanActivate(true,false,true,button,button.anchor),"nearby ready guest may activate simple switch");
+    Check(!m::CanActivate(false,false,true,button,button.anchor),"unready guest cannot activate");
+    Check(!m::CanActivate(true,true,true,button,button.anchor),"host occupied switch cannot be overwritten");
+    Check(!m::CanActivate(true,false,false,button,button.anchor),"stale guest position cannot activate");
+    auto farPosition=button.anchor;farPosition[0]+=501;Check(!m::CanActivate(true,false,true,button,farPosition),"remote switch activation cannot bypass range");
+    auto invalid=button;invalid.request=0;Check(!m::Valid(invalid),"activation needs request identifier");
+    invalid=button;invalid.state=2;Check(!m::Valid(invalid),"only two-state direct switches accepted");
+    invalid=button;invalid.target.clear();Check(!m::Valid(invalid),"switch without target rejected");
+    invalid=button;invalid.anchor[0]=std::numeric_limits<float>::quiet_NaN();Check(!m::Valid(invalid),"non-finite mechanism anchor rejected");
+    m::State gate;gate.kind=m::Kind::Mover;gate.name="EVT_XARDAS_SECRET_01";gate.revision=1;
+    gate.frames=2;gate.frame=0.5f;gate.direction=1;gate.state=1;gate.anchor={29785.96f,5140.82f,-16279.85f};
+    Check(m::Valid(gate),"moving gate state is valid");
+    bytes=m::Encode(gate);Check(m::Decode(bytes,decoded)&&decoded.frame==0.5f&&decoded.direction==1,"fractional mover state and native advance direction preserved");
+    for(std::size_t n=0;n<bytes.size();++n){auto cut=bytes;cut.resize(n);Check(!m::Decode(cut,decoded),"truncated mover state rejected");}
+    invalid=gate;invalid.frame=2;Check(!m::Valid(invalid),"mover frame beyond native array rejected");
+    invalid=gate;invalid.frames=4097;Check(!m::Valid(invalid),"mover frame count bounded");
+    invalid=gate;invalid.direction=std::numeric_limits<float>::infinity();Check(!m::Valid(invalid),"invalid native movement direction rejected");
+    invalid=gate;invalid.kind=static_cast<m::Kind>(99);Check(!m::Valid(invalid),"unknown native mechanism class rejected");
+    invalid=gate;invalid.op=m::Op::Activate;invalid.request=1;invalid.revision=0;Check(!m::Valid(invalid),"guest cannot request arbitrary mover state");
+    Check(m::ApplyNewer(0,1)&&m::ApplyNewer(1,2)&&!m::ApplyNewer(2,1)&&!m::ApplyNewer(2,2),"late and duplicate states do not toggle mover again");
+    Check(m::AfterUnlock(0,false,true,false)==m::OpenGate::Wait,"inventory waits even after local key clears lock");
+    Check(m::AfterUnlock(1,false,true,false)==m::OpenGate::Open,"host-confirmed unlock permits source request");
+    Check(m::AfterUnlock(1,false,true,true)==m::OpenGate::Cancel,"still locked after decision fails closed");
+    Check(m::AfterUnlock(2,false,true,false)==m::OpenGate::Cancel,"host abort does not open inventory");
+    Check(m::AfterUnlock(0,true,true,false)==m::OpenGate::Cancel,"unlock timeout cancels interaction without inventory grant");
+    Check(m::AfterUnlock(1,false,false,false)==m::OpenGate::Cancel,"late confirmation after Escape does not reopen chest");
+    w::TalkLease talk;talk.Begin(1,1000);talk.Observe(2000,true,true,true);
+    Check(talk.phase==w::TalkLease::Phase::Active&&talk.Allows(1,4500),"active native conversation renews bounded AI lease");
+    talk.Observe(4600,false,true,true);
+    Check(talk.phase==w::TalkLease::Phase::Finishing&&talk.Allows(1,7000),"native end script and messages retain local AI after UI closes");
+    talk.Begin(1,5000);Check(talk.phase==w::TalkLease::Phase::Finishing,"repeated start callbacks do not reset finishing state");
+    talk.Observe(7100,false,false,false);talk.Observe(7299,false,false,false);
+    Check(talk.Allows(1,7299),"handoff waits for stable native quiescence");
+    talk.Observe(7300,false,false,false);Check(!talk.npc,"quiescent end hands NPC back to mirror");
+    talk.Begin(1,8000);Check(talk.Allows(1,8000),"same NPC can be approached again after completed dialogue");
+    talk.Observe(8100,true,true,false);talk.Observe(8200,false,true,true);
+    Check(talk.Expired(13200)&&!talk.Allows(2,8300),"cleanup watchdog bounded and unrelated NPC AI remains mirrored");
+    talk.Clear();Check(!talk.npc&&talk.phase==w::TalkLease::Phase::Idle,"disconnect clears all dialogue phase state");
+    Network host,guest;ConnectedPair(host,guest);Bytes wire;
+    Check(guest.SendEvent(m::Encode(button),1200),"switch request enters actual reliable UDP channel");Pump(host,guest,1201);
+    Check(host.ConsumeEvent(wire)&&m::Decode(wire,decoded)&&decoded.op==m::Op::Activate,"host receives activation with request identity");
+    Check(host.SendEvent(m::Encode(gate),1210),"host sends mover baseline over actual reliable UDP");Pump(host,guest,1211);
+    Check(guest.ConsumeEvent(wire)&&m::Decode(wire,decoded)&&decoded.frame==0.5f,"guest receives host mover phase intact");
+}

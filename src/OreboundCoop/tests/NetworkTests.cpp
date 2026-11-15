@@ -12,6 +12,7 @@
 #include "coop/InventoryInput.h"
 #include "coop/Recovery.h"
 #include "coop/WorldProtocol.h"
+#include "coop/MechanismProtocol.h"
 #include "coop/SessionProtocol.h"
 #include "coop/CavalornPolicy.h"
 #include "coop/QolPolicy.h"
@@ -344,6 +345,7 @@ void TestKeyboardLayout() {
 #include "MenuArtworkTests.inl"
 #include "NativeSaveTests.inl"
 #include "WorldTests.inl"
+#include "MechanismTests.inl"
 #include "SessionTests.inl"
 #include "QolTests.inl"
 #include "TimingTests.inl"
@@ -385,6 +387,7 @@ int main(int argc,char** argv) {
         TestWorldCodecAndLifecycle();
         TestDualActivation();
         TestWorldTransport();
+        TestMechanismsAndInteractions();
         TestTradeRecoveryMatrix();
         TestLocalDropRecovery();
         TestLegacyRecoveryMigration();

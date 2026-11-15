@@ -21,10 +21,24 @@ inline int MatchAnchor(const std::vector<float>& distances) {
     return best>=0&&std::sqrt(second)-std::sqrt(first)>=100?best:-1;
 }
 struct TalkLease {
-    unsigned npc=0;std::uint64_t until=0;
-    void Begin(unsigned id,std::uint64_t now){npc=id;until=id?now+3000:0;}
+    enum class Phase {Idle,Requested,Active,Finishing};
+    unsigned npc=0;std::uint64_t until=0,quietSince=0;Phase phase=Phase::Idle;
+    void Begin(unsigned id,std::uint64_t now){
+        if(id==npc&&(phase==Phase::Active||phase==Phase::Finishing))return;
+        npc=id;until=id?now+3000:0;quietSince=0;phase=id?Phase::Requested:Phase::Idle;
+    }
     bool Allows(unsigned id,std::uint64_t now)const{return id&&id==npc&&now<until;}
-    void Clear(){npc=0;until=0;}
+    bool Expired(std::uint64_t now)const{return npc&&now>=until;}
+    void Observe(std::uint64_t now,bool active,bool nativeEnding,bool queueBusy){
+        if(!npc)return;
+        if(active){phase=Phase::Active;until=now+3000;quietSince=0;return;}
+        if(phase==Phase::Active){phase=Phase::Finishing;until=now+5000;quietSince=0;}
+        if(phase==Phase::Finishing){
+            if(!nativeEnding&&!queueBusy){if(!quietSince)quietSince=now;if(now-quietSince>=200)Clear();}
+            else quietSince=0;
+        }else if(phase==Phase::Requested&&now>=until)Clear();
+    }
+    void Clear(){npc=0;until=quietSince=0;phase=Phase::Idle;}
 };
 enum class Life:std::uint32_t {Visible=1,Dormant=2,Removed=3};
 inline unsigned RemovalLife(bool culling){return static_cast<unsigned>(culling?Life::Dormant:Life::Removed);}

@@ -1,6 +1,6 @@
 # Orebound Co-op – deutsche Kurzanleitung
 
-Aktueller Entwicklungsstand: Alpha.38, Protokoll 11 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
+Aktueller Entwicklungsstand: Alpha.39, Protokoll 12 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
 
 Die eigene Oberfläche unterstützt Deutsch und Englisch. Auswahl: **Union & Plugins → Orebound Co-op → Sprache / Language**. Nach der Auswahl Einstellungen speichern. Die Sprache gilt lokal; beide PCs können unterschiedlich eingestellt sein. Öffentliche Neuinstallationen verwenden Englisch, bestehende Profile werden bei der Migration standardmäßig Deutsch behalten.
 
@@ -15,3 +15,5 @@ Optionales eigenes Startmenübild mit transparentem inneren Menüfenster und erh
 Alpha.37 ergänzt den zuvor umgangenen normalen Aktionspfad bei Kisten/Leichen, toleriert leere Sprint-Tastenbelegungen und unterstützt die optionale weibliche Alltagskleidung als separat lokal gebautes Ressourcenarchiv. Kleidung vom Benutzer bestätigt; erneute Spielprüfung von Entnahme und Einlagern bleibt offen. [Änderungen](docs/ALPHA-37.md).
 
 [Alpha.38: native Menuebedienung](docs/ALPHA-38.md). Hoch/Runter waehlt die Zeile, Links/Rechts aendert den Wert. Anschliessend Einstellungen speichern. Die weibliche Alltagskleidung ist bestaetigt.
+
+[Alpha.39](docs/ALPHA-39.md): Schlüsselöffnung, Interaktionsabbruch, Gesprächsabschluss und einfache gemeinsame Gitter. Beide PCs auf Protokoll 12 aktualisieren; native Wiederholung erforderlich.

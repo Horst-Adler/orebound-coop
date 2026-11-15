@@ -21,7 +21,7 @@ void RestoreMenuArtwork(zCMenu* menu){
  diagnostics.Write(1,"menu_artwork_restore",std::string("menu=")+menu->GetName().ToChar()+" native_backgrounds_restored=1");
 }
 void ApplyMenuArtwork(zCMenu* menu){
- if(!menu||menuArtwork.count(menu)||systemDirectory.empty()||zCMenu::inGameMenu)return;
+ if(!menu||menuArtwork.count(menu)||systemDirectory.empty()||zCMenu::inGameMenu||(gameMan&&gameMan->IsGameRunning()))return;
  if(ReadIni("Interface","MenuArtwork","1")=="0")return;
  try{
   auto* menuParser=zCMenu::GetParser();if(!menuParser)return;
