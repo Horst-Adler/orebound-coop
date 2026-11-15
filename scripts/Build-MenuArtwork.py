@@ -51,7 +51,10 @@ boot_decoded=Image.frombytes('RGBA',(1024,1024),boot_check.mipmap_rgba(0))
 assert boot_decoded.getchannel('A').getextrema()==(255,255)
 boot_error=ImageStat.Stat(ImageChops.difference(boot,boot_decoded.convert('RGB'))).mean
 assert max(boot_error)<8,boot_error
-textures={texture_name:blob,boot_name:boot_blob}
+loading_names=['LOADING-C.TEX','LOADING_NEWWORLD-C.TEX','LOADING_OLDWORLD-C.TEX','LOADING_ADDONWORLD-C.TEX','LOADING_DRAGONISLAND-C.TEX']
+# Native OpenLoadscreen selects loading_<world>.tga, with loading.tga as
+# fallback. Keep its stock RGB565 layout and leave progress bars/logos alone.
+textures={texture_name:blob,boot_name:boot_blob,**{name:boot_blob for name in loading_names}}
 vfs=zenkit.Vfs();stamp=datetime.datetime(2026,11,14,15,0,tzinfo=datetime.timezone.utc)
 folder=vfs.mkdir('_WORK/DATA/TEXTURES/_COMPILED')
 for name,data in textures.items():folder.create(name,data,timestamp=stamp)
@@ -64,13 +67,13 @@ raw=target.read_bytes();count=struct.unpack_from('<I',raw,272)[0];catalog=struct
 for at in range(catalog,catalog+count*80,80):
  name=raw[at:at+64].decode('ascii').strip('\0 ');offset,size,flags,_=struct.unpack_from('<4I',raw,at+64)
  if not flags&0x80000000:assert raw[offset:offset+size]==textures[name];entries.append(name)
-assert set(entries)==set(textures),'Only the own menu image and requested startup background may be included'
+assert set(entries)==set(textures),'Only the own menu image, startup and approved loading backgrounds may be included'
 sha=hashlib.sha256(raw).hexdigest().upper()
 catalogue=dict(Schema=1,Optional=True,File='Data/OreboundCoop_Menu.vdf',SHA256=sha,Texture='OREBOUND_COOP_MENU.TGA',MenuABI=1,SourceSHA256=hashlib.sha256(source.read_bytes()).hexdigest().upper())
 (root/'config/menu-artwork.json').write_text(json.dumps(catalogue,indent=2)+'\n',encoding='utf-8')
 header='#pragma once\nnamespace orebound::menuart { inline constexpr const char* ArchiveHash="'+sha+'"; inline constexpr const char* TextureName="OREBOUND_COOP_MENU.TGA"; inline constexpr int MenuABI=1; }\n'
 header_path=root/'src/OreboundCoop/include/coop/MenuArtworkHash.h'
 if not header_path.exists() or header_path.read_text(encoding='utf-8')!=header:header_path.write_text(header,encoding='utf-8')
-manifest=dict(catalogue,Bytes=len(raw),TextureSize=[2048,1024],Mipmaps=len(mips),Format='Opaque DXT1 / BC1',StartupTexture=dict(File=boot_name,Size=[1024,1024],Format='RGB565',Mipmaps=1,MeanAbsoluteRGBError=boot_error),Entries=entries,AllMipPixelsVerified=True,IndependentVdfMountVerified=True,CompressionMeanAbsoluteRGBError=quality,OriginalResourcesOverridden=True,OverriddenOriginalResources=[boot_name],OriginalLogoResourcesOverridden=False,GamesStarted=False,NativeVisualAcceptance=False)
+manifest=dict(catalogue,Bytes=len(raw),TextureSize=[2048,1024],Mipmaps=len(mips),Format='Opaque DXT1 / BC1',StartupTexture=dict(File=boot_name,Size=[1024,1024],Format='RGB565',Mipmaps=1,MeanAbsoluteRGBError=boot_error),LoadingTextures=loading_names,Entries=entries,AllMipPixelsVerified=True,IndependentVdfMountVerified=True,CompressionMeanAbsoluteRGBError=quality,OriginalResourcesOverridden=True,OverriddenOriginalResources=[boot_name]+loading_names,OriginalLogoResourcesOverridden=False,GamesStarted=False,NativeVisualAcceptance=False)
 (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
 print('PASS: opaque single-mip BC1 menu plus stock-format RGB565 startup background; colors/VDF verified; original logos untouched. RGB error:',quality)

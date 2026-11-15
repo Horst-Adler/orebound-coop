@@ -352,6 +352,7 @@ void TestKeyboardLayout() {
 #include "QolTests.inl"
 #include "TimingTests.inl"
 #include "PartyTests.inl"
+#include "Alpha41Tests.inl"
 int main(int argc,char** argv) {
     const bool headless=argc==2&&std::strcmp(argv[1],"--headless")==0;
     if(argc>2||(argc==2&&!headless)){
@@ -382,6 +383,8 @@ int main(int argc,char** argv) {
         TestLootConservation();
         TestRecoveryWire();
         TestRecoveryStore();
+        TestAsyncRecoveryDurability();
+        TestReplicaEquipmentAndTerminalCodec();
         TestInterruptedJournal();
         TestRecoveryCheckpoints();
         TestNativeSavePaths();

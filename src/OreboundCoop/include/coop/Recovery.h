@@ -4,6 +4,8 @@
 #include <bcrypt.h>
 #include <stdexcept>
 #include <functional>
+#include <future>
+#include <chrono>
 namespace orebound::recovery {
 constexpr unsigned MaxRecords=8192;
 struct NpcCandidate {std::string name;bool human=false;std::array<float,3> position{},anchor{};};
@@ -145,9 +147,26 @@ enum class StoreRecovery {Clean,Identical,Promoted,Stale};
 inline bool UnknownCommitQuery(const Message& m){return m.op==Op::Query&&m.tx.decision==Decision::Commit;}
 class Store {
     std::string path_,profile_;std::map<std::string,Record> records_;bool open_=false;StoreRecovery recovery_=StoreRecovery::Clean;
-    void Save(const std::map<std::string,Record>& candidate){combat::Writer w;w.data.push_back(0xa7);w.u(4);w.text(profile_);w.u(static_cast<unsigned>(candidate.size()));for(const auto& pair:candidate){w.u(static_cast<unsigned>(pair.second.role));w.u(pair.second.ordinal);Write(w,pair.second.tx);}AtomicWrite(path_,Seal(w));}
+    std::future<void> write_;std::map<std::string,Record> pending_;
+    combat::Bytes Bytes(const std::map<std::string,Record>& candidate)const{combat::Writer w;w.data.push_back(0xa7);w.u(4);w.text(profile_);w.u(static_cast<unsigned>(candidate.size()));for(const auto& pair:candidate){w.u(static_cast<unsigned>(pair.second.role));w.u(pair.second.ordinal);Write(w,pair.second.tx);}return Seal(w);}
+    void Save(const std::map<std::string,Record>& candidate){AtomicWrite(path_,Bytes(candidate));}
 public:
-    void Open(const std::string& path){path_=path;records_.clear();profile_.clear();open_=false;recovery_=StoreRecovery::Clean;
+    bool Busy()const{return write_.valid();}
+    void Wait(){if(!write_.valid())return;try{write_.get();records_=std::move(pending_);}catch(...){open_=false;pending_.clear();throw;}}
+    bool Poll(){if(write_.valid()&&write_.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return false;Wait();return true;}
+    bool BeginPut(const Tx& t,Role role){
+        if(!open_||Busy()||!Valid(t))return false;auto copy=records_;auto it=copy.find(t.id);
+        if(it!=copy.end()){
+            if(!Same(it->second.tx,t)||it->second.role!=role)return false;
+            if(it->second.tx.decision!=Decision::Prepared&&it->second.tx.decision!=t.decision)return false;
+            if(it->second.tx.decision==t.decision)return true;it->second.tx=t;
+        }else {if(copy.size()>=MaxRecords)return false;const auto ordinal=static_cast<unsigned>(copy.size()+1);copy.emplace(t.id,Record{t,role,ordinal});}
+        auto bytes=Bytes(copy);const auto path=path_;pending_=std::move(copy);
+        // Copies of bytes/path only. No game objects or Store maps are accessed
+        // by the worker; records become visible only after durable completion.
+        write_=std::async(std::launch::async,[path,bytes=std::move(bytes)](){AtomicWrite(path,bytes);});return true;
+    }
+    void Open(const std::string& path){Wait();path_=path;records_.clear();profile_.clear();open_=false;recovery_=StoreRecovery::Clean;
         const auto pending=path+".pending";const bool mainExists=Exists(path),hasPending=Exists(pending);
         if(!mainExists&&!hasPending){profile_=NewGuid();Save(records_);open_=true;return;}
         StoreSnapshot main;if(mainExists)main=ReadStore(path);
@@ -180,6 +199,7 @@ public:
     std::vector<Record> Ordered()const{std::vector<Record> out;for(const auto& p:records_)out.push_back(p.second);std::sort(out.begin(),out.end(),[](const Record& a,const Record& b){return a.ordinal<b.ordinal;});return out;}
     const Record* Find(const std::string& id)const{auto it=records_.find(id);return it==records_.end()?nullptr:&it->second;}
     bool Put(const Tx& t,Role role){
+        Wait();
         if(!open_||!Valid(t))return false;auto copy=records_;auto it=copy.find(t.id);
         if(it!=copy.end()){
             if(!Same(it->second.tx,t)||it->second.role!=role)return false;

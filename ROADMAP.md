@@ -1,6 +1,6 @@
 # Roadmap
 
-Target: two-player Gothic II DNdR co-op. Current developer build: Alpha.40. Technical implementation and native gameplay acceptance are tracked separately; no fixed release date or campaign-wide compatibility promise.
+Target: two-player Gothic II DNdR co-op. Current developer build: Alpha.41. Technical implementation and native gameplay acceptance are tracked separately; no fixed release date or campaign-wide compatibility promise.
 
 ## Alpha: reliable shared core
 
@@ -8,8 +8,7 @@ Target: two-player Gothic II DNdR co-op. Current developer build: Alpha.40. Tech
 - Validate ground items, corpses, containers, deposits, locks, merchants and recovery without duplication or loss.
 - Finish general shared quests and authorized turn-in by either player. Eligible quest rewards are 100% per player, not a 50/50 split. Faction quests remain separate unless both players qualify through the same faction.
 - Accept the Alpha.40 same-world victory XP, first Cavalorn decision/guest request, mission/key permissions and consent-based existing-save resume. General faction/campaign adapters remain open.
-- Later Alpha work: sleep/time, general pause rules, world/chapter transitions, automatic paired save writes and companion conflicts. These five areas were explicitly deferred from the current first-five-rule task.
-- Complete coordinated world/chapter transitions and campaign save/resume. Two activation areas in one world are implemented; unrestricted independent worlds are not.
+- Accept existing manual save/reconnect and agreed loading of existing save pairs. Two activation areas in one world are implemented; coordinated world/chapter transitions and automatic save pairs belong to Beta.
 - Accept personal NPC/crime state, local training/permanent bonuses, special movement, transformations and owned summons in separate native test cases.
 - Introduce Orebound Co-op branding and English/German local UI. Public documentation is English-first; the productive work website stays German. Alpha.33 contains the technical foundation; native menu/parser and mixed-language acceptance remain open.
 - Preserve Union as the authority and Ninja as the bounded script layer. Comfort modules remain optional with conditional dependencies and exact supported profiles.
@@ -17,6 +16,8 @@ Target: two-player Gothic II DNdR co-op. Current developer build: Alpha.40. Tech
 Alpha exit: reproducible shared base workflows on both PCs, safe reconnect/resume and no unresolved critical crashes, duplicate/lost items or progression blockers.
 
 ## Beta: extended play and comfort
+
+- Shared sleep/world time, explicit coordinated pause, coordinated world/chapter transitions, automatic creation of durable paired saves and general companion handling. All five areas were explicitly moved out of Alpha.
 
 - Direct player dialogue and item/gold trade with mutual confirmation and authoritative atomic exchange.
 - Two male and two female appearance choices. The existing female leather/cloth outfit was accepted in Alpha.37 and is retained.

@@ -47,13 +47,14 @@ bool QolPrepareCorpse(oCNpc* npc){
     npc->inventory2.UnpackAllItems();return true;
 }
 void QolCommitLocal(const rc::Tx& prepared){
-    auto tx=prepared;
-    if(!recoveryStore.Put(tx,rc::Role::Local))throw std::runtime_error("Cannot prepare host quickloot");
-    tx.decision=rc::Decision::Commit;
-    if(!recoveryStore.Put(tx,rc::Role::Local))throw std::runtime_error("Cannot commit host quickloot");
-    if(!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Host quickloot replay deferred");
-    LootLog("quickloot_grant","tx="+tx.id+" instance="+std::to_string(tx.item)+" amount="+std::to_string(tx.amount));
-    QolNotify(tx.item,tx.amount);
+    RecoveryPersist(prepared,rc::Role::Local,[prepared](){
+        auto tx=prepared;tx.decision=rc::Decision::Commit;
+        RecoveryPersist(tx,rc::Role::Local,[tx](){
+            if(!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Host quickloot replay deferred");
+            LootLog("quickloot_grant","tx="+tx.id+" instance="+std::to_string(tx.item)+" amount="+std::to_string(tx.amount));
+            QolNotify(tx.item,tx.amount);
+        });
+    });
 }
 bool QolItem(oCItem* item,bool corpse=false){return item&&qol::QuickItem(LootEligible(item),item->mainflag,item->flags,corpse);}
 void QolFrame(unsigned long long now){

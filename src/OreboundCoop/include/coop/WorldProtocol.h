@@ -40,6 +40,14 @@ struct TalkLease {
     }
     void Clear(){npc=0;until=quietSince=0;phase=Phase::Idle;}
 };
+struct NpcProbeMatch {int index=-1;bool provenAbsent=false;};
+inline NpcProbeMatch MatchNpcProbe(const std::vector<float>& distances,bool waypointMatch){
+    if(distances.empty())return {-1,true};
+    int best=-1;float first=(std::numeric_limits<float>::infinity)(),second=first;
+    for(std::size_t i=0;i<distances.size();++i){const float d=distances[i];if(!std::isfinite(d)||d<0)continue;if(d<first){second=first;first=d;best=static_cast<int>(i);}else if(d<second)second=d;}
+    if(best<0||(!waypointMatch&&first>=4000000)||std::sqrt(second)-std::sqrt(first)<100)return {-1,false};
+    return {best,false};
+}
 enum class Life:std::uint32_t {Visible=1,Dormant=2,Removed=3};
 inline unsigned RemovalLife(bool culling){return static_cast<unsigned>(culling?Life::Dormant:Life::Removed);}
 struct Ground {std::uint32_t id=0,revision=0,instance=0,amount=0;bool present=false;std::array<float,3> anchor{},position{};std::string name;};

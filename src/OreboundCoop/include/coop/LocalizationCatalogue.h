@@ -231,6 +231,7 @@ inline constexpr Entry Catalogue[]={
  {u8"party.entry_help",u8"Agree on a shared return point or reload it together.",u8"Gemeinsamen Ruecksetzpunkt vereinbaren oder gemeinsam laden."},
  {u8"party.checkpoint_help",u8"Uses your existing saves; does not write a new game save.",u8"Verknuepft vorhandene Spielstaende und schreibt keinen neuen Spielstand."},
  {u8"party.resume_help",u8"Both players must agree. Both return to the paired saves.",u8"Beide muessen bestaetigen und kehren zu ihren verknuepften Spielstaenden zurueck."},
+ {u8"recovery.disk_wait",u8"Item transfer is being saved. Please wait briefly.",u8"Itemtransfer wird gesichert. Bitte kurz warten."},
 };
 struct MenuText {const char* symbol;int index;const char* id;};
 inline constexpr MenuText MenuCatalogue[]={

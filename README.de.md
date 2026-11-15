@@ -1,6 +1,6 @@
 # Orebound Co-op – deutsche Kurzanleitung
 
-Aktueller Entwicklungsstand: Alpha.40, Protokoll 13 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
+Aktueller Entwicklungsstand: Alpha.41, Protokoll 14 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
 
 Die eigene Oberfläche unterstützt Deutsch und Englisch. Auswahl: **Union & Plugins → Orebound Co-op → Sprache / Language**. Nach der Auswahl Einstellungen speichern. Die Sprache gilt lokal; beide PCs können unterschiedlich eingestellt sein. Öffentliche Neuinstallationen verwenden Englisch, bestehende Profile werden bei der Migration standardmäßig Deutsch behalten.
 
@@ -19,3 +19,5 @@ Alpha.37 ergänzt den zuvor umgangenen normalen Aktionspfad bei Kisten/Leichen, 
 [Alpha.39](docs/ALPHA-39.md): Schlüsselöffnung, Interaktionsabbruch, Gesprächsabschluss und einfache gemeinsame Gitter. Diese Änderungen bleiben im aktuellen Build enthalten; native Wiederholung mit Alpha.40 / Protokoll 13 erforderlich.
 
 [Alpha.40](docs/ALPHA-40.md): volle Kampf-EP in derselben Welt, bestätigte Cavalorn-Entscheidungen auch vom Client, Missions-/Schlüsselberechtigungen und gemeinsames Laden bereits vorhandener Spielstände nach Zustimmung. Fraktionspfade werden bei der Vergabe ausgewertet; allgemeine Fraktionsquestadapter und Kampagnensynchronisierung sind noch nicht freigegeben. Keine Wiederbelebung und keine automatischen gemeinsamen Speicherungen. Neue Spielabnahme offen.
+
+[Alpha.41](docs/ALPHA-41.md): Gittererkennung, Gast-Gesprächsübergabe, Leichenpose, Partnerwaffen und dauerhafte asynchrone Aufnahmepfade korrigiert; Ladebilder ergänzt. Gezielte Spielabnahme offen. Schlaf/Zeit, allgemeine Pause, Welt-/Kapitelwechsel, automatische neue Speicherpaare und allgemeine Begleiterlogik gehören vollständig zur Beta. Bestätigte Xardas-/Schlüsseltruhenfälle bleiben erhalten.

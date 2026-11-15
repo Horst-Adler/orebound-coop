@@ -11,6 +11,22 @@ unsigned mechanismRevision=0,mechanismRequest=0,mechanismLastRequest=0;
 unsigned long long mechanismScan=0,mechanismFrameAt=0;
 bool mechanismReplaying=false;
 std::set<std::string> mechanismTargetNames;
+std::map<std::string,std::vector<zCMover*>> mechanismMoverTargets;
+std::map<std::string,unsigned> mechanismTargetCounts;
+std::string mechanismRegistrySummary;
+void MechanismClearTargets(){for(auto& targetPair:mechanismMoverTargets)for(auto* mover:targetPair.second)mover->Release();mechanismMoverTargets.clear();mechanismTargetCounts.clear();}
+std::vector<zCVob*> MechanismWorldObjects(){
+    std::vector<zCVob*> objects;
+    if(!ogame||!ogame->GetGameWorld())return objects;
+    auto* root=&ogame->GetGameWorld()->globalVobTree;
+    for(auto* node=root->GetFirstChild();node;){
+        if(auto* vob=node->GetData())objects.push_back(vob);
+        if(node->GetFirstChild()){node=node->GetFirstChild();continue;}
+        while(node!=root&&!node->GetNextChild())node=node->GetParent();
+        node=node==root?nullptr:node->GetNextChild();
+    }
+    return objects;
+}
 bool MechanismMoverShape(zCMover* mover){
     return mover&&mover->GetObjectName().Length()>0&&mover->GetObjectName().Length()<=63&&
         mover->moverAniType==zCMover::MA_KEYFRAME&&
@@ -22,12 +38,9 @@ bool MechanismSwitch(oCMobInter* mob){
        mob->conditionFunc.Length()!=0||mob->useWithItem.Length()!=0||mob->state_num!=1||zDYNAMIC_CAST<oCMobLockable>(mob))return false;
     // Only direct native gate targets. Do not execute unrelated quest, teleport
     // or workstation trigger chains remotely under a guessed actor context.
-    bool found=false;auto* list=ogame&&ogame->GetGameWorld()?ogame->GetGameWorld()->voblist:nullptr;
-    if(list)for(auto* it=list->GetNextInList();it;it=it->GetNextInList()){
-        auto* vob=it->GetData();if(!vob||vob->GetObjectName()!=mob->triggerTarget)continue;
-        if(!MechanismMoverShape(zDYNAMIC_CAST<zCMover>(vob)))return false;found=true;
-    }
-    return found;
+    const auto found=mechanismMoverTargets.find(mob->triggerTarget.ToChar());
+    const auto count=mechanismTargetCounts.find(mob->triggerTarget.ToChar());
+    return found!=mechanismMoverTargets.end()&&found->second.size()==1&&count!=mechanismTargetCounts.end()&&count->second==1&&MechanismMoverShape(found->second.front());
 }
 bool MechanismMover(zCMover* mover){return MechanismMoverShape(mover)&&mechanismTargetNames.count(mover->GetObjectName().ToChar())!=0;}
 mech::State MechanismCapture(zCVob* vob){
@@ -41,25 +54,38 @@ mech::State MechanismCapture(zCVob* vob){
     s.anchor={p[0],p[1],p[2]};return s;
 }
 void MechanismReset(){
+    MechanismClearTargets();mechanismRegistrySummary.clear();
     for(auto& item:mechanismBindings)item->vob->Release();
     mechanismTargetNames.clear();mechanismBindings.clear();mechanismByPointer.clear();mechanismRevision=mechanismRequest=mechanismLastRequest=0;
     mechanismScan=mechanismFrameAt=0;mechanismReplaying=false;
 }
 void MechanismScan(){
     if(!ogame||!ogame->GetGameWorld())return;
-    auto* list=ogame->GetGameWorld()->voblist;
-    if(!list)return;
-    for(auto* it=list->GetNextInList();it;it=it->GetNextInList()){
-        auto* mob=zDYNAMIC_CAST<oCMobInter>(it->GetData());if(MechanismSwitch(mob))mechanismTargetNames.insert(mob->triggerTarget.ToChar());
+    // oCWorld::voblist excludes zCMover: enumerate the complete zCVob tree.
+    const auto objects=MechanismWorldObjects();MechanismClearTargets();mechanismTargetNames.clear();
+    unsigned movers=0,switches=0;
+    for(auto* vob:objects)if(auto* mover=zDYNAMIC_CAST<zCMover>(vob)){
+        if(!MechanismMoverShape(mover))continue;
+        if(++movers>4096){combatFailure="Mechanism target limit reached";return;}
+        mover->AddRef();mechanismMoverTargets[mover->GetObjectName().ToChar()].push_back(mover);
     }
-    for(auto* it=list->GetNextInList();it;it=it->GetNextInList()){
-        auto* vob=it->GetData();if(!vob||mechanismByPointer.count(vob))continue;
+    // A same-name script trigger or unsupported mover makes the target chain
+    // ambiguous even if there is only one otherwise supported mover.
+    for(auto* vob:objects)if(mechanismMoverTargets.count(vob->GetObjectName().ToChar()))++mechanismTargetCounts[vob->GetObjectName().ToChar()];
+    for(auto* vob:objects){
+        auto* mob=zDYNAMIC_CAST<oCMobInter>(vob);if(MechanismSwitch(mob)){mechanismTargetNames.insert(mob->triggerTarget.ToChar());++switches;}
+    }
+    for(auto* vob:objects){
+        if(!vob||mechanismByPointer.count(vob))continue;
         auto* mover=zDYNAMIC_CAST<zCMover>(vob);auto* mob=zDYNAMIC_CAST<oCMobInter>(vob);
         if(!MechanismMover(mover)&&!MechanismSwitch(mob))continue;
         if(mechanismBindings.size()>=4096){combatFailure="Mechanism registry limit reached";return;}
         auto entry=std::make_unique<MechanismBinding>();entry->vob=vob;vob->AddRef();entry->desired=MechanismCapture(vob);
         mechanismByPointer[vob]=entry.get();mechanismBindings.push_back(std::move(entry));
+        LootLog("mechanism_registered","name="+std::string(vob->GetObjectName().ToChar())+" target="+(mob?std::string(mob->triggerTarget.ToChar()):std::string())+" kind="+(mover?"mover":"switch"));
     }
+    const auto summary="objects="+std::to_string(objects.size())+" movers="+std::to_string(movers)+" switches="+std::to_string(switches)+" bindings="+std::to_string(mechanismBindings.size());
+    if(summary!=mechanismRegistrySummary){mechanismRegistrySummary=summary;LootLog("mechanism_registry",summary);}
 }
 MechanismBinding* MechanismFind(const mech::State& s){
     MechanismBinding* match=nullptr;

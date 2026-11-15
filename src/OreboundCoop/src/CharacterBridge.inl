@@ -14,6 +14,15 @@ ch::Counters characterObserved{};
 struct CharacterWitnessBank {unsigned references=0;bool guest=false;std::array<int,10> hostAiv{};int hostKnown=0;std::string key;};
 std::map<oCNpc*,CharacterWitnessBank> characterWitnessBanks;
 ch::CounterBank characterCounterBank;
+std::string characterWeaponKey;
+zCModel* characterWeaponModel=nullptr;
+std::vector<oCItem*> characterWeaponVisuals;
+void CharacterClearWeapons(){
+    auto* npc=PartnerNpc();auto* model=npc?npc->GetModel():nullptr;
+    if(model&&model==characterWeaponModel)for(const char* slot:{NPC_NODE_RIGHTHAND,NPC_NODE_LEFTHAND,NPC_NODE_SWORD,NPC_NODE_LONGSWORD,NPC_NODE_BOW,NPC_NODE_CROSSBOW})
+        if(auto* node=model->SearchNode(zSTRING(slot)))model->SetNodeVisual(node,nullptr,TRUE);
+    for(auto* item:characterWeaponVisuals)item->Release();characterWeaponVisuals.clear();characterWeaponKey.clear();characterWeaponModel=nullptr;
+}
 std::map<std::string,unsigned> characterSummons;
 std::map<unsigned,ch::RelationUpdate> characterPendingRelations;
 std::deque<co::Bytes> characterOutbox;
@@ -40,6 +49,7 @@ void CharacterHoldForm(oCNpc* npc){
 }
 void CharacterClearForms(){if(!characterForms.empty())CombatLog("character_forms_release","count="+std::to_string(characterForms.size()));for(auto* npc:characterForms)npc->Release();characterForms.clear();characterHumanRoot=nullptr;appearancePlayer=nullptr;appliedAppearance=-1;characterProgressKey.clear();characterMovementKey.clear();}
 void CharacterSessionReset(){
+    CharacterClearWeapons();
     if(characterGuestDepth){CharacterCounters(characterCounterBank.host);if(parser&&player)parser->SetInstance(zSTRING("HERO"),player);}
     for(auto& e:characterWitnessBanks)if(e.second.guest){for(unsigned i=0;i<ch::PersonalAiv.size();++i)e.first->aiscriptvars[ch::PersonalAiv[i]]=e.second.hostAiv[i];e.first->knowsPlayer=e.second.hostKnown;}
     ++characterEpoch;characterReady=characterHello=false;characterGuestDepth=0;characterReceipt=characterLastSnapshot=characterLastDeltaSent=0;characterLastSend=0;characterPeerVisualKey.clear();characterWitnessBanks.clear();characterSummons.clear();characterPendingRelations.clear();characterOutbox.clear();
@@ -152,6 +162,7 @@ void CharacterNpcApply(NpcBinding& binding,const co::Npc& s){
 co::Visual CharacterVisual(oCNpc* npc){
     co::Visual v;if(!npc)return v;v.model=npc->mds_name.ToChar();v.body=npc->body_visualName.ToChar();v.head=npc->head_visualName.ToChar();v.bodyTex=npc->body_TexVarNr;v.headTex=npc->head_TexVarNr;v.bodyColor=npc->body_TexColorNr;
     auto* armor=npc->GetEquippedArmor();v.armor=armor?armor->GetInstance():-1;v.scale={npc->model_scale[0],npc->model_scale[1],npc->model_scale[2]};v.transformed=(npc->GetBodyState()&BS_MOD_TRANSFORMED)!=0||!npc->IsHuman();v.humanoid=npc->IsHuman()!=FALSE&&!v.transformed;
+    if(v.humanoid){auto* melee=npc->GetEquippedMeleeWeapon();auto* ranged=npc->GetEquippedRangedWeapon();v.melee=melee?melee->GetInstance():-1;v.ranged=ranged?ranged->GetInstance():-1;}
     if(v.humanoid&&npc->activeOverlays.GetNumInList()<=64)for(int i=0;i<npc->activeOverlays.GetNumInList();++i){const std::string name=npc->activeOverlays[i].ToChar();if(co::SpecialOverlay(name))v.overlays.push_back(name);}
     if(v.humanoid)if(auto* model=npc->GetModel())if(model->modelProtoList.GetNumInList()<=64)for(int i=0;i<model->modelProtoList.GetNumInList();++i){
         auto* prototype=model->modelProtoList[i];if(!prototype)continue;std::string name=prototype->modelProtoFileName.ToChar();const auto slash=name.find_last_of("/\\");if(slash!=std::string::npos)name.erase(0,slash+1);const auto dot=name.find_last_of('.');if(dot!=std::string::npos)name.resize(dot);name+=".MDS";
@@ -160,8 +171,33 @@ co::Visual CharacterVisual(oCNpc* npc){
     if(!co::Valid(v)){combatFailure="Invalid local character visual";return {};}
     return v;
 }
+void CharacterApplyWeapons(){
+    auto* npc=PartnerNpc();if(!npc||!havePeerCombat||!npc->GetModel())return;
+    auto* model=npc->GetModel();const auto& v=peerCombat.visual;const auto mode=peerCombat.stats.weapon;
+    const auto key=std::to_string(v.humanoid)+":"+std::to_string(v.melee)+":"+std::to_string(v.ranged)+":"+std::to_string(mode);
+    if(key==characterWeaponKey&&model==characterWeaponModel)return;
+    CharacterClearWeapons();characterWeaponModel=model;
+    // Visual-only objects never enter a world, inventory or native equipment
+    // slot. Only their mesh is attached, so corpse loot/save cannot duplicate it.
+    if(v.humanoid){QuestBindings bindings;
+        for(int instance:{v.melee,v.ranged}){
+            if(instance<0)continue;lo::Entry entry;entry.instance=instance;entry.amount=1;
+            auto* item=CreateLootItem(entry);if(!item){CombatLog("peer_weapon_error","instance="+std::to_string(instance)+" reason=invalid_item");continue;}
+            const bool ranged=item->HasFlag(ITM_FLAG_BOW)||item->HasFlag(ITM_FLAG_CROSSBOW);
+            const bool melee=item->HasFlag(ITM_FLAG_DAG)||item->HasFlag(ITM_FLAG_SWD)||item->HasFlag(ITM_FLAG_AXE)||item->HasFlag(ITM_FLAG_2HD_SWD)||item->HasFlag(ITM_FLAG_2HD_AXE);
+            if(!ranged&&!melee){item->Release();continue;}
+            const char* slot=nullptr;
+            if(ranged){const bool crossbow=item->HasFlag(ITM_FLAG_CROSSBOW)!=FALSE;slot=mode==(crossbow?NPC_WEAPON_CBOW:NPC_WEAPON_BOW)?(crossbow?NPC_NODE_RIGHTHAND:NPC_NODE_LEFTHAND):(crossbow?NPC_NODE_CROSSBOW:NPC_NODE_BOW);}
+            else {const bool twoHand=item->HasFlag(ITM_FLAG_2HD_SWD)||item->HasFlag(ITM_FLAG_2HD_AXE);slot=mode==NPC_WEAPON_1HS||mode==NPC_WEAPON_2HS?NPC_NODE_RIGHTHAND:(twoHand?NPC_NODE_LONGSWORD:NPC_NODE_SWORD);}
+            auto* node=model->SearchNode(zSTRING(slot));auto* visual=item->GetVisual();
+            if(node&&visual){model->SetNodeVisual(node,visual,TRUE);characterWeaponVisuals.push_back(item);}
+            else {CombatLog("peer_weapon_error","instance="+std::to_string(instance)+" slot="+slot+" reason=missing_node_or_visual");item->Release();}
+        }
+    }
+    characterWeaponKey=key;CombatLog("peer_weapons","melee="+std::to_string(v.melee)+" ranged="+std::to_string(v.ranged)+" mode="+std::to_string(mode)+" meshes="+std::to_string(characterWeaponVisuals.size()));
+}
 void CharacterApplyPeerVisual(){
-    auto* npc=PartnerNpc();if(!npc||!havePeerCombat)return;const auto& v=peerCombat.visual;const auto key=co::VisualKey(v);if(key==characterPeerVisualKey)return;
+    auto* npc=PartnerNpc();if(!npc||!havePeerCombat)return;const auto& v=peerCombat.visual;auto bodyVisual=v;bodyVisual.melee=bodyVisual.ranged=-1;const auto key=co::VisualKey(bodyVisual);if(key==characterPeerVisualKey){CharacterApplyWeapons();return;}
     if(v.model.empty())return;
     if(_stricmp(v.model.c_str(),npc->mds_name.ToChar())!=0)static_cast<zCVob*>(npc)->SetVisual(zSTRING(v.model.c_str()));
     if(!v.body.empty()){zSTRING body(v.body.c_str()),head(v.head.c_str());npc->SetAdditionalVisuals(body,v.bodyTex,v.bodyColor,head,v.headTex,v.headColor,v.armor);}
@@ -178,6 +214,7 @@ void CharacterApplyPeerVisual(){
     remoteModel->SetRandAnisEnabled(FALSE);remoteModel->aniTransScale=zVEC3(0,0,0);remoteModel->doVobRot=FALSE;remoteAnimation=-1;characterPeerVisualKey=key;
     CombatLog("character_visual","peer model="+v.model+" humanoid="+std::to_string(v.humanoid)+" transformed="+std::to_string(v.transformed));
     ReportAvatarClothing(npc,"peer");
+    characterWeaponKey.clear();CharacterApplyWeapons();
 }
 void CharacterObserve(unsigned long long){
     if(!player)return;

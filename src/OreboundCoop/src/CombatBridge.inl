@@ -3,7 +3,7 @@
 namespace co=combat;
 struct NpcBinding {
     oCNpc* npc=nullptr;std::uint32_t id=0,revision=0;zVEC3 anchor,rootScale;
-    bool mirror=false,originalRotation=false,originalPhysics=false,modelDefaultsCaptured=false,owned=false,hidden=false,pausedByPeer=false,anchorFixed=false;std::uint32_t generation=1,life=1,probeCookie=0;std::string visualKey;co::Npc desired;unsigned long long last=0;int loggedHp=-1;
+    bool mirror=false,originalRotation=false,originalPhysics=false,modelDefaultsCaptured=false,owned=false,hidden=false,pausedByPeer=false,anchorFixed=false;std::uint32_t generation=1,life=1,probeCookie=0;std::string visualKey,terminalAnimation,sourceWaypoint;co::Npc desired;unsigned long long last=0;int loggedHp=-1;unsigned terminalKind=0;float originalTimeScale=1;
 };
 std::vector<std::unique_ptr<NpcBinding>> npcBindings;
 std::map<oCNpc*,NpcBinding*> npcByPointer;
@@ -37,7 +37,7 @@ void CombatReset(){
         // disconnect even though those NPCs are authoritative, not mirrors.
         if(entry->modelDefaultsCaptured&&(entry->mirror||entry->pausedByPeer)){auto* model=zDYNAMIC_CAST<zCModel>(n->GetVisual());if(model){model->aniTransScale=entry->rootScale;if(entry->mirror)model->doVobRot=entry->originalRotation;}}
         entry->pausedByPeer=false;
-        if(entry->mirror)n->SetPhysicsEnabled(entry->originalPhysics);
+        if(entry->mirror){n->SetPhysicsEnabled(entry->originalPhysics);if(auto* model=n->GetModel())model->timeScale=entry->originalTimeScale;}
         if(entry->owned&&n->homeWorld){if(resetHost&&entry->desired.owner==co::GuestPlayer&&ogame&&ogame->spawnman)ogame->spawnman->DeleteNpc(n);else n->RemoveVobFromWorld();}
         n->Release();
     }
@@ -45,17 +45,24 @@ void CombatReset(){
     combatSession=false;combatSessionHost=false;havePeerCombat=false;rulesReady=false;ruleRevision=0;combatRevision=0;nextNpcId=1;npcCursor=0;
     lastCombatSend=lastNpcScan=lastAggro=lastAggroLog=0;combatFailure.clear();peerCombat=co::Peer{};
 }
+std::string CombatSourceWaypoint(oCNpc* npc){
+    std::string name=npc->spawnPoint.Length()?npc->spawnPoint.ToChar():npc->wpname.ToChar();
+    if(name.size()>63||std::any_of(name.begin(),name.end(),[](unsigned char c){return c<32||c>126;}))return {};
+    for(char& c:name)if(c>='a'&&c<='z')c=static_cast<char>(c-'a'+'A');return name;
+}
 NpcBinding* RegisterCombatNpc(oCNpc* npc){
     if(!npc||CharacterFormSwitch()||CharacterLocal(npc)||npc==PartnerNpc()||npc->GetInstance()<0)return nullptr;
-    const auto found=npcByPointer.find(npc);if(found!=npcByPointer.end())return found->second;
+    const auto found=npcByPointer.find(npc);if(found!=npcByPointer.end()){if(found->second->sourceWaypoint.empty())found->second->sourceWaypoint=CombatSourceWaypoint(npc);return found->second;}
     if(npcBindings.size()>=8192){combatFailure="NPC registry limit reached";return nullptr;}
     auto entry=std::make_unique<NpcBinding>();entry->npc=npc;npc->AddRef();entry->anchor=npc->GetPositionWorld();entry->anchorFixed=npc->homeWorld!=nullptr;
     auto* model=zDYNAMIC_CAST<zCModel>(npc->GetVisual());
     entry->rootScale=model?model->aniTransScale:zVEC3(1,1,1);
+    entry->originalTimeScale=model?model->timeScale:1;
     entry->originalRotation=model?model->doVobRot:false;entry->life=npc->homeWorld?1:2;
     entry->originalPhysics=npc->physicsEnabled!=FALSE;
     entry->modelDefaultsCaptured=model!=nullptr;
     if(HostCombat()){entry->id=nextNpcId++;npcById[entry->id]=entry.get();}
+    entry->sourceWaypoint=CombatSourceWaypoint(npc);
     CharacterRestoreSummon(*entry);
     auto* value=entry.get();npcByPointer[npc]=value;npcBindings.push_back(std::move(entry));return value;
 }
@@ -129,6 +136,13 @@ NpcBinding* ResolveCombatNpc(const co::Npc& message){
     std::vector<NpcBinding*> candidates;std::vector<float> distances;
     NpcBinding* unique=nullptr;int matches=0;
     for(auto& entry:npcBindings){if(entry->mirror||entry->npc->GetInstance()!=message.instance)continue;++matches;unique=entry.get();const float d=Distance2(entry->anchor,anchor);candidates.push_back(entry.get());distances.push_back(d);}
+    // Native insertion waypoints disambiguate monsters whose inactive anchors
+    // coincide. Never pick an arbitrary first entry from an identical cluster.
+    if(!message.sourceWaypoint.empty()){
+        std::vector<NpcBinding*> named;std::vector<float> namedDistances;
+        for(std::size_t i=0;i<candidates.size();++i)if(candidates[i]->sourceWaypoint==message.sourceWaypoint){named.push_back(candidates[i]);namedDistances.push_back(distances[i]);}
+        if(!named.empty()){candidates=std::move(named);distances=std::move(namedDistances);matches=static_cast<int>(candidates.size());unique=matches==1?candidates.front():nullptr;if(unique){best=unique;closest=distances.front();}}
+    }
     const int resolved=worldsync::MatchAnchor(distances);
     if(resolved>=0){best=candidates[resolved];closest=distances[resolved];}
     if(matches==1&&unique->npc->IsHuman()){best=unique;closest=0;}
@@ -245,14 +259,38 @@ void CombatFrame(unsigned long long now,float elapsed){
         }
     }
     UpdateCombatActor();
-    for(int i=0;i<64&&(!menuDeferredEvents.empty()||network.ConsumeEvent(bytes));++i){if(!menuDeferredEvents.empty()){bytes=std::move(menuDeferredEvents.front());menuDeferredEvents.pop_front();}if(!bytes.empty()&&(bytes[0]==81||bytes[0]==82)){PartyQuestReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]==80){PartyReceiveControl(bytes);continue;}if(!bytes.empty()&&(bytes[0]==52||bytes[0]==53)){MechanismReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
+    for(int i=0;i<64&&!RecoveryAsyncBusy()&&(!menuDeferredEvents.empty()||network.ConsumeEvent(bytes));++i){if(!menuDeferredEvents.empty()){bytes=std::move(menuDeferredEvents.front());menuDeferredEvents.pop_front();}if(!bytes.empty()&&(bytes[0]==81||bytes[0]==82)){PartyQuestReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]==80){PartyReceiveControl(bytes);continue;}if(!bytes.empty()&&(bytes[0]==52||bytes[0]==53)){MechanismReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
     while(!deferredHits.empty()){
         auto& hit=deferredHits.front();if(!ExecuteCombatHit(hit.damage)){if(timing::Elapsed(now,hit.at)>3000)combatFailure="Combat target not mapped before event timeout";break;}deferredHits.pop_front();
     }
     if(!HostCombat())for(auto& entry:npcBindings){
         auto* npc=entry->npc;if(CharacterLocal(npc)||entry->life!=1||!entry->mirror||!entry->last||npc->homeWorld!=ogame->GetWorld()||!npc->GetModel()||WorldLocalTalksTo(npc))continue;
-        npc->GetModel()->aniTransScale=zVEC3(0,0,0);
+        auto* model=npc->GetModel();model->aniTransScale=zVEC3(0,0,0);
         const auto& p=entry->desired.pose;const auto old=npc->GetPositionWorld();
+        const auto& stats=entry->desired.stats;
+        static_assert(BS_DEAD==23&&BS_UNCONSCIOUS==22&&BS_ONLY_STATE==127,"replica terminal-state contract");
+        const unsigned terminal=co::TerminalKind(stats.attributes[0],stats.bodyState);
+        if(terminal){
+            const bool changed=entry->terminalKind!=terminal;
+            if(changed){entry->terminalKind=terminal;entry->terminalAnimation.clear();if(auto* em=npc->GetEM(FALSE))em->Clear();}
+            // A corpse is an authoritative pose, not a running NPC whose death
+            // animation gets restarted every render frame.
+            if(changed||Distance2(old,zVEC3(p.x,p.y,p.z))>25)PlaceNetworkActor(*npc,zVEC3(p.x,p.y,p.z),p.yaw);
+            std::string animation=entry->desired.animation;
+            const auto token=terminal==2?"DEAD":"UNCON";
+            if(animation.find(token)==std::string::npos){
+                animation=terminal==2?"S_DEAD":"S_UNCONSCIOUS";
+                if(model->GetAniIDFromAniName(zSTRING(animation.c_str()))<0)animation=terminal==2?"T_DEAD":"T_UNCONSCIOUS";
+            }
+            if(entry->terminalAnimation!=animation){
+                model->StopAnisLayerRange(0,2);SetCombatAnimation(model,animation);entry->terminalAnimation=animation;
+                CombatLog("npc_terminal_pose","id="+std::to_string(entry->id)+" kind="+std::to_string(terminal)+" animation="+animation);
+            }
+            const int ani=model->GetAniIDFromAniName(zSTRING(animation.c_str()));
+            if(ani>=0)if(auto* active=model->GetActiveAni(ani))active->SetProgressPercent((std::max)(0.0f,(std::min)(0.999f,entry->desired.animationProgress)));
+            model->timeScale=0;model->doVobRot=FALSE;npc->SetPhysicsEnabled(FALSE);continue;
+        }
+        if(entry->terminalKind){entry->terminalKind=0;entry->terminalAnimation.clear();model->timeScale=entry->originalTimeScale;model->StopAnisLayerRange(0,2);CombatLog("npc_terminal_release","id="+std::to_string(entry->id));}
         const float blend=Distance2(old,zVEC3(p.x,p.y,p.z))>4000000?1.0f:1.0f-std::exp(-elapsed*15.0f);
         PlaceNetworkActor(*npc,zVEC3(old[0]+(p.x-old[0])*blend,old[1]+(p.y-old[1])*blend,old[2]+(p.z-old[2])*blend),p.yaw);
         npc->GetModel()->doVobRot=FALSE;npc->SetSleepingMode(zVOB_AWAKE);SetCombatAnimation(npc->GetModel(),entry->desired.animation);
@@ -266,7 +304,7 @@ void CombatFrame(unsigned long long now,float elapsed){
                 auto& e=*npcBindings[(npcCursor++)%npcBindings.size()];auto* n=e.npc;
                 if(e.life==3||CharacterLocal(n))continue;if(n->homeWorld!=ogame->GetWorld()||!n->GetModel())continue;const auto pos=n->GetPositionWorld();
                 const bool nearbyPlayers=haveTarget&&Distance2(pos,zVEC3(target.x,target.y,target.z))<64000000.0f;if(!nearbyPlayers)continue;
-                co::Npc s;s.id=e.id;s.revision=++combatRevision;s.generation=e.generation;s.life=1;WorldNpcVisual(s,n);s.instance=n->GetInstance();s.anchor={e.anchor[0],e.anchor[1],e.anchor[2]};const auto direction=n->GetAtVectorWorld();s.pose={pos[0],pos[1],pos[2],std::atan2(direction[0],direction[2])*57.295779513f};s.stats=ReadCombatStats(n);s.animation=CombatAnimation(n->GetModel());
+                co::Npc s;s.id=e.id;s.revision=++combatRevision;s.generation=e.generation;s.life=1;WorldNpcVisual(s,n);s.instance=n->GetInstance();s.anchor={e.anchor[0],e.anchor[1],e.anchor[2]};const auto direction=n->GetAtVectorWorld();s.pose={pos[0],pos[1],pos[2],std::atan2(direction[0],direction[2])*57.295779513f};s.stats=ReadCombatStats(n);s.animation=CombatAnimation(n->GetModel());if(!s.animation.empty()){const int ani=n->GetModel()->GetAniIDFromAniName(zSTRING(s.animation.c_str()));if(ani>=0)if(auto* active=n->GetModel()->GetActiveAni(ani))s.animationProgress=(std::max)(0.0f,(std::min)(1.0f,active->GetProgressPercent()));}
                 if(!co::Valid(s.stats)){CombatLog("combat_reject","invalid native NPC stats id="+std::to_string(e.id));continue;}
                 if(e.loggedHp!=s.stats.attributes[0]){e.loggedHp=s.stats.attributes[0];CombatLog("npc_health","authority=host id="+std::to_string(e.id)+" hp="+std::to_string(s.stats.attributes[0])+" max="+std::to_string(s.stats.attributes[1]));}
                 network.SendWorldState(co::Encode(s));++sent;

@@ -16,10 +16,33 @@ std::string recoverySavingWorld;
 rc::Checkpoint recoverySavingCheckpoint;
 std::string recoveryLastWorld;
 std::map<std::string,unsigned long long> recoveryLockTimes;
+std::function<void()> recoveryContinuation;
+std::deque<co::Bytes> recoveryDeferred;
+unsigned recoveryAsyncEpoch=0;
+bool RecoveryAsyncBusy(){return recoveryStore.Busy()||static_cast<bool>(recoveryContinuation);}
+void RecoveryPersist(const rc::Tx& tx,rc::Role role,std::function<void()> done){
+    if(RecoveryAsyncBusy())throw std::runtime_error("Recovery durable operation already pending");
+    const auto started=Now();const auto epoch=recoveryAsyncEpoch;
+    if(!recoveryStore.BeginPut(tx,role))throw std::runtime_error("Cannot stage durable recovery operation");
+    LootLog("recovery_async_begin","tx="+tx.id+" decision="+std::to_string(static_cast<unsigned>(tx.decision)));
+    recoveryContinuation=[epoch,started,id=tx.id,done=std::move(done)](){
+        if(epoch!=recoveryAsyncEpoch)return;
+        LootLog("recovery_async_durable","tx="+id+" elapsed_ms="+std::to_string(timing::Elapsed(Now(),started)));
+        done();
+    };
+}
+void RecoveryPoll(){
+    if(!recoveryStore.Poll())return;
+    auto done=std::move(recoveryContinuation);recoveryContinuation={};if(done)done();
+}
 
 void RecoveryFail(const std::string& why){recoveryError=why;recoveryBlocked=true;LootLog("recovery_error",why);notice=Ui("ui_76ad8effa733");}
 void QueueRecovery(const rc::Message& m){if(lootOutbox.size()>=128){RecoveryFail("Recovery queue full");return;}lootOutbox.push_back(rc::Encode(m));}
-void RecoverySessionReset(){recoveryResponses.clear();recoveryPeerTimeline.clear();recoveryHello=false;recoveryUiTx.clear();recoveryQueries.clear();recoveryLockSent.clear();recoveryLastLocks=0;recoveryLockTimes.clear();recoveryLastQueryScan=0;}
+void RecoverySessionReset(){
+    ++recoveryAsyncEpoch;recoveryContinuation={};recoveryDeferred.clear();
+    try{recoveryStore.Wait();}catch(const std::exception& e){RecoveryFail(e.what());}
+    recoveryResponses.clear();recoveryPeerTimeline.clear();recoveryHello=false;recoveryUiTx.clear();recoveryQueries.clear();recoveryLockSent.clear();recoveryLastLocks=0;recoveryLockTimes.clear();recoveryLastQueryScan=0;
+}
 void RecoveryInit(){
     rc::SetTraceSink([](const std::string& phase,const std::string& detail){LootLog(("recovery_"+phase).c_str(),detail);});
     try{const auto legacy=systemDirectory+"\\ZweiklangCoopState";recoveryDir=GetFileAttributesA(legacy.c_str())!=INVALID_FILE_ATTRIBUTES?legacy:systemDirectory+"\\OreboundCoopState";if(!CreateDirectoryA(recoveryDir.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)throw std::runtime_error("Cannot create recovery directory");recoveryStore.Open(recoveryDir+"\\transactions.bin");recoveryStoreReady=true;LootLog("recovery_store_open","records="+std::to_string(recoveryStore.Records().size())+" repair="+std::to_string(static_cast<unsigned>(recoveryStore.RecoveryStatus())));}
@@ -136,6 +159,7 @@ bool RecoveryApply(const rc::Record& record,bool desired){
 }
 bool RecoveryReconcile(const rc::Record& r){return rc::Reconcile(r,recoveryEffects,RecoveryApply);}
 std::string RecoveryBlockReason(){
+    if(RecoveryAsyncBusy())return Ui("recovery.disk_wait");
     if(saving||network.PeerSaving())return Ui("ui_fa8bdbff19cb");
     if(!recoveryError.empty())return recoveryError;
     if(recoveryBlocked)return Ui("ui_8483542d8fa2");
@@ -143,6 +167,7 @@ std::string RecoveryBlockReason(){
     return {};
 }
 bool RecoveryCanLoot(){
+    if(RecoveryAsyncBusy()){notice=Ui("recovery.disk_wait");return false;}
     if(PartyQuestBusy()||PartyUniquePending()){notice=Ui("party.quest_wait");return false;}
     if(!CharacterReady()){notice=Ui("ui_263eaf75a6f4");return false;}
     if(saving||network.PeerSaving()){notice=Ui("ui_e0acf3b1a778");return false;}
@@ -163,9 +188,11 @@ bool RecoveryClientTransfer(oCItem* item,unsigned count,unsigned token,bool put)
     if(!recoveryReady||recoveryPeerTimeline.empty())return false;
     try{
         auto tx=RecoveryNew(put?rc::Action::Put:rc::Action::Take,clientLootSource,item->GetInstance(),count);
-        if(!recoveryStore.Put(tx,rc::Role::Owner))throw std::runtime_error("Cannot prepare owner transfer");
-        if(put&&!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Cannot reserve deposit inventory");
-        rc::Message m;m.op=rc::Op::Request;m.tx=tx;m.request=clientPendingTake=NextLootRequest();m.lease=clientLease;m.revision=clientLootRevision;m.token=token;recoveryUiTx=tx.id;QueueRecovery(m);lootClientWait=Now();
+        rc::Message m;m.op=rc::Op::Request;m.tx=tx;m.request=clientPendingTake=NextLootRequest();m.lease=clientLease;m.revision=clientLootRevision;m.token=token;recoveryUiTx=tx.id;lootClientWait=Now();
+        RecoveryPersist(tx,rc::Role::Owner,[m,put](){
+            if(put&&!RecoveryReconcile(*recoveryStore.Find(m.tx.id)))throw std::runtime_error("Cannot reserve deposit inventory");
+            QueueRecovery(m);lootClientWait=Now();
+        });
         LootLog("recovery_transfer_request","tx="+tx.id+" action="+(put?std::string("put"):std::string("take"))+" request="+std::to_string(m.request)+" lease="+std::to_string(m.lease)+" revision="+std::to_string(m.revision)+" instance="+std::to_string(tx.item)+" amount="+std::to_string(count));
         return true;
     }catch(const std::exception& e){RecoveryFail(e.what());return false;}
@@ -184,12 +211,7 @@ bool RecoveryTransfer(oCItemContainer* container,int amount){
     RecoveryClientTransfer(item,count,token,put);
     return true;
 }
-void RecoveryResult(const rc::Message& m){
-    const auto* old=recoveryStore.Find(m.tx.id);
-    if(!old||old->role!=rc::Role::Owner||!rc::Same(old->tx,m.tx)||m.tx.decision==rc::Decision::Prepared)throw std::runtime_error("Unsolicited/conflicting persistent decision");
-    const bool first=!recoveryEffects.count(m.tx.id+(m.tx.action==rc::Action::Buy?"c":""));
-    LootLog("recovery_result_begin","tx="+m.tx.id+" decision="+std::to_string(static_cast<unsigned>(m.tx.decision)));
-    if(!recoveryStore.Put(m.tx,rc::Role::Owner))throw std::runtime_error("Conflicting terminal decision");
+void RecoveryResultApplied(const rc::Message& m,bool first){
     if(!RecoveryReconcile(*recoveryStore.Find(m.tx.id)))throw std::runtime_error("Owner decision requires unavailable inventory/source; replay deferred");
     if(first&&m.tx.decision==rc::Decision::Commit&&(clientQuickLoot||m.tx.action==rc::Action::GroundTake))QolNotify(m.tx.item,m.tx.amount);
     if(m.tx.id==recoveryUiTx){
@@ -205,6 +227,13 @@ void RecoveryResult(const rc::Message& m){
     LootLog("recovery_result_applied","tx="+m.tx.id+" first="+std::to_string(first));
     auto ack=m;ack.op=rc::Op::Receipt;QueueRecovery(ack);
 }
+void RecoveryResult(const rc::Message& m){
+    const auto* old=recoveryStore.Find(m.tx.id);
+    if(!old||old->role!=rc::Role::Owner||!rc::Same(old->tx,m.tx)||m.tx.decision==rc::Decision::Prepared)throw std::runtime_error("Unsolicited/conflicting persistent decision");
+    const bool first=!recoveryEffects.count(m.tx.id+(m.tx.action==rc::Action::Buy?"c":""));
+    LootLog("recovery_result_begin","tx="+m.tx.id+" decision="+std::to_string(static_cast<unsigned>(m.tx.decision)));
+    RecoveryPersist(m.tx,rc::Role::Owner,[m,first](){RecoveryResultApplied(m,first);});
+}
 bool RecoveryValidateHostRequest(const rc::Message& m){
     if(!recoveryReady||m.tx.hostTimeline!=recoveryTimeline||m.tx.world!=CurrentWorld()||m.tx.decision!=rc::Decision::Prepared)return false;
     LootSource s;if(m.tx.action!=rc::Action::Unlock&&guestLootSource.vob){const auto id=RecoveryIdentity(guestLootSource);if(id.kind==m.tx.source.kind&&id.name==m.tx.source.name&&id.position==m.tx.source.position)s=guestLootSource;}else s=RecoverySource(m.tx);
@@ -212,8 +241,34 @@ bool RecoveryValidateHostRequest(const rc::Message& m){
     if(m.tx.action==rc::Action::Unlock)return s.chest&&(!guestLootSource.vob||guestLootSource.vob==s.vob)&&!LootUIOpen(s);
     return s.vob==guestLootSource.vob&&m.lease==lootLedger.Lease()&&m.revision==lootLedger.Revision()&&(!s.chest||!s.chest->locked)&&(!s.corpse||(m.tx.source.kind==lo::Source::Merchant?!s.corpse->IsDead():(s.corpse->IsDead()||s.corpse->IsUnconscious())))&&WorldValidatePrice(m);
 }
+bool RecoveryHostTake(rc::Message request){
+    if((request.tx.action!=rc::Action::Take&&request.tx.action!=rc::Action::Buy)||request.op!=rc::Op::Request||!RecoveryValidateHostRequest(request))return false;
+    if(!request.token||request.token>guestLootItems.size())return false;
+    auto* item=guestLootItems[request.token-1].item;
+    if(!item||item->GetInstance()!=static_cast<int>(request.tx.item))return false;
+    lo::Message legacy;legacy.op=lo::Op::Take;legacy.request=request.request;legacy.lease=request.lease;legacy.revision=request.revision;legacy.item={request.token,request.tx.item,request.tx.amount};
+    // Validate against a COPY before writing a commit. The real ledger and
+    // source are mutated together only after the worker confirms durability.
+    auto preview=lootLedger;
+    const auto predicted=preview.Take(legacy,[&](const lo::Entry& entry,unsigned){return item->amount==static_cast<int>(entry.amount);});
+    if(predicted.status!=lo::Status::Ok)return false;
+    request.tx.decision=rc::Decision::Commit;
+    RecoveryPersist(request.tx,rc::Role::Host,[request,legacy](){
+        const auto result=lootLedger.Take(legacy,[&](const lo::Entry& entry,unsigned){
+            if(!request.token||request.token>guestLootItems.size())return false;
+            auto* source=guestLootItems[request.token-1].item;
+            if(!source||source->amount!=static_cast<int>(entry.amount))return false;
+            return rc::Reconcile(*recoveryStore.Find(request.tx.id),recoveryEffects,[&](const rc::Record&,bool desired){return desired&&LootRemove(guestLootSource,source,request.tx.amount);});
+        });
+        if(result.status!=lo::Status::Ok)throw std::runtime_error("Durable take source/lease changed; reload trusted saves");
+        auto response=request;response.op=rc::Op::Result;response.revision=result.revision;response.token=result.item.token;
+        recoveryResponses[request.tx.id]=response;QueueRecovery(response);lootLastTraffic=Now();
+        LootLog("recovery_decision","tx="+request.tx.id+" action="+std::to_string(static_cast<unsigned>(request.tx.action))+" decision=1 async=1");
+    });return true;
+}
 void RecoveryReceive(const std::vector<std::uint8_t>& bytes){
     try{
+        if(RecoveryAsyncBusy()){if(recoveryDeferred.size()>=256)throw std::runtime_error("Recovery disk backlog exceeded");recoveryDeferred.push_back(bytes);return;}
         rc::Message m;if(!rc::Decode(bytes,m))throw std::runtime_error("Malformed recovery message");
         if(m.op==rc::Op::Hello){if(!HostCombat()){if(!recoveryPeerTimeline.empty()&&recoveryPeerTimeline!=m.tx.hostTimeline)throw std::runtime_error("Host save lineage changed during session");recoveryPeerTimeline=m.tx.hostTimeline;}return;}
         if(m.op==rc::Op::LockState){
@@ -240,6 +295,7 @@ void RecoveryReceive(const std::vector<std::uint8_t>& bytes){
         if(rc::UnknownCommitQuery(m))throw std::runtime_error("Owner has commit but host record is missing; refusing invented abort");
         if(m.op==rc::Op::Request&&m.tx.decision!=rc::Decision::Prepared)throw std::runtime_error("New request already has terminal decision");
         if(WorldHostRequest(m))return;
+        if(RecoveryHostTake(m))return;
         auto decided=m.tx;bool accepted=false;
         if(m.op==rc::Op::Request&&RecoveryValidateHostRequest(m)){
             auto apply=[&](const lo::Entry& entry,std::uint32_t){
@@ -299,6 +355,9 @@ int RecoveryUnlockDecision(const std::string& id){
 void RecoveryFrame(){
     if(recoveryLoading||recoverySaveSlot>=0||!player||!ogame||!ogame->GetWorld()||!recoveryError.empty())return;
     try{
+        RecoveryPoll();if(RecoveryAsyncBusy())return;
+        for(unsigned i=0;i<32&&!recoveryDeferred.empty()&&!RecoveryAsyncBusy();++i){auto bytes=std::move(recoveryDeferred.front());recoveryDeferred.pop_front();RecoveryReceive(bytes);}
+        if(RecoveryAsyncBusy()||!recoveryError.empty())return;
         const auto now=Now();
         if(recoveryReady&&(recoveryLastReplay==0||timing::Elapsed(now,recoveryLastReplay)>=1000||recoveryLastWorld!=CurrentWorld())){
         recoveryLastReplay=now;recoveryLastWorld=CurrentWorld();recoveryBlocked=false;

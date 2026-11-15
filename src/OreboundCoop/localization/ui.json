@@ -1145,6 +1145,11 @@
       "id": "party.resume_help",
       "en": "Both players must agree. Both return to the paired saves.",
       "de": "Beide muessen bestaetigen und kehren zu ihren verknuepften Spielstaenden zurueck."
+    },
+    {
+      "id": "recovery.disk_wait",
+      "en": "Item transfer is being saved. Please wait briefly.",
+      "de": "Itemtransfer wird gesichert. Bitte kurz warten."
     }
   ],
   "menu": [

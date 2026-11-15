@@ -49,6 +49,24 @@ bool WorldBeginTalk(oCNpc* npc,oCNpc* other){
     npc->SetPhysicsEnabled(entry.originalPhysics);npc->SetSleepingMode(zVOB_AWAKE);
     CombatLog("dialog_request","npc="+std::string(npc->GetObjectName().ToChar())+" id="+std::to_string(entry.id)+" phase=requested");return true;
 }
+void WorldTalkInput(int key){
+    if(!CombatConnected()||HostCombat()||!player||!zinput||zCMenu::GetActive()||!rulesReady||!CharacterReady()||!recoveryReady)return;
+    if(!zinput->IsBinded(GAME_ACTION,static_cast<unsigned short>(key))||player->GetWeaponMode()!=0||player->interactMob||player->inventory2.IsOpen()||player->IsDead()||player->IsUnconscious())return;
+    auto* npc=player->GetFocusNpc();
+    if(!npc||npc==PartnerNpc()||!npc->IsHuman()||npc->IsDead()||npc->IsUnconscious()||npc->GetWeaponMode()!=0||npc->interactMob||npc->enemy||Distance2(player->GetPositionWorld(),npc->GetPositionWorld())>250000)return;
+    auto& info=oCInformationManager::GetInformationManager();
+    if(!info.IsDone||worldTalkLease.npc||!CombatMirror(npc))return;
+    const auto it=npcByPointer.find(npc);if(it==npcByPointer.end()||!it->second->mirror)return;
+    // Release only the player's explicit talk target BEFORE CanBeTalkedTo checks
+    // queued use-item/routine work. Frozen ambient messages cannot finish while
+    // mirrored AI is intentionally suppressed. Never clear authoritative AI.
+    auto* em=npc->GetEM(FALSE);const int queued=em?em->GetNumMessages():0;
+    CombatLog("dialog_intent","id="+std::to_string(it->second->id)+" body="+std::to_string(npc->GetBodyState())+" ai="+std::to_string(npc->state.GetState())+" queued="+std::to_string(queued)+" interact_item="+std::to_string(npc->interactItem!=nullptr));
+    if(!WorldBeginTalk(npc,player))return;
+    if(em)em->Clear();npc->state.ClearAIState();npc->SetInteractItem(nullptr);
+    npc->SetBodyState(BS_STAND);SetCombatAnimation(npc->GetModel(),"S_STAND");
+    CombatLog("dialog_handoff","id="+std::to_string(it->second->id)+" queue_after="+std::to_string(em?em->GetNumMessages():0));
+}
 void WorldTalkFrame(unsigned long long now){
     if(!CombatConnected()||HostCombat())return;
     auto& info=oCInformationManager::GetInformationManager();
@@ -127,6 +145,7 @@ void WorldTradeBegin(oCInformationManager* manager){
     RequestClientLoot(source);
 }
 void WorldNpcVisual(co::Npc& s,oCNpc* npc){
+    const auto identity=npcByPointer.find(npc);if(identity!=npcByPointer.end())s.sourceWaypoint=identity->second->sourceWaypoint;
     s.sprint=QolSprint(npc);s.model=npc->mds_name.ToChar();s.body=npc->body_visualName.ToChar();s.head=npc->head_visualName.ToChar();
     if(s.model.size()>63)s.model.clear();if(s.body.size()>63)s.body.clear();if(s.head.size()>63)s.head.clear();
     s.bodyTex=npc->body_TexVarNr;s.headTex=npc->head_TexVarNr;s.bodyColor=npc->body_TexColorNr;
@@ -134,7 +153,7 @@ void WorldNpcVisual(co::Npc& s,oCNpc* npc){
 }
 co::Npc WorldNpcState(NpcBinding& e){
     co::Npc s=e.desired;s.id=e.id;s.generation=e.generation;s.life=e.life;s.revision=++combatRevision;s.instance=e.npc->GetInstance();s.anchor={e.anchor[0],e.anchor[1],e.anchor[2]};
-    if(e.life!=3){const auto p=e.npc->GetPositionWorld();const auto d=e.npc->GetAtVectorWorld();s.pose={p[0],p[1],p[2],std::atan2(d[0],d[2])*57.295779513f};s.stats=ReadCombatStats(e.npc);s.animation=CombatAnimation(zDYNAMIC_CAST<zCModel>(e.npc->GetVisual()));WorldNpcVisual(s,e.npc);}
+    if(e.life!=3){const auto p=e.npc->GetPositionWorld();const auto d=e.npc->GetAtVectorWorld();s.pose={p[0],p[1],p[2],std::atan2(d[0],d[2])*57.295779513f};s.stats=ReadCombatStats(e.npc);s.animation=CombatAnimation(zDYNAMIC_CAST<zCModel>(e.npc->GetVisual()));if(auto* model=e.npc->GetModel()){const int id=model->GetAniIDFromAniName(zSTRING(s.animation.c_str()));if(id>=0)if(auto* active=model->GetActiveAni(id))s.animationProgress=(std::max)(0.0f,(std::min)(1.0f,active->GetProgressPercent()));}WorldNpcVisual(s,e.npc);}
     e.desired=s;return s;
 }
 void WorldLife(oCNpc* npc,unsigned life){
@@ -230,9 +249,12 @@ bool WorldHostRequest(rc::Message& m){
     else allowed=allowed&&m.tx.source.name=="ZK_DROP_"+m.tx.id;
     auto tx=m.tx;tx.decision=allowed?rc::Decision::Commit:rc::Decision::Abort;
     LootLog("ground_decision_begin","tx="+tx.id+" decision="+std::to_string(static_cast<unsigned>(tx.decision))+" item="+std::to_string(tx.item));
-    if(!recoveryStore.Put(tx,rc::Role::Host))throw std::runtime_error("Cannot persist ground decision");
-    if(!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Ground decision replay deferred");
-    m.tx=tx;m.op=rc::Op::Result;recoveryResponses[tx.id]=m;QueueRecovery(m);LootLog("ground_decision","tx="+tx.id+" action="+std::to_string(static_cast<unsigned>(tx.action))+" decision="+std::to_string(static_cast<unsigned>(tx.decision)));return true;
+    auto result=m;result.tx=tx;result.op=rc::Op::Result;
+    RecoveryPersist(tx,rc::Role::Host,[result](){
+        if(!RecoveryReconcile(*recoveryStore.Find(result.tx.id)))throw std::runtime_error("Ground decision replay deferred");
+        recoveryResponses[result.tx.id]=result;QueueRecovery(result);
+        LootLog("ground_decision","tx="+result.tx.id+" action="+std::to_string(static_cast<unsigned>(result.tx.action))+" decision="+std::to_string(static_cast<unsigned>(result.tx.decision)));
+    });return true;
 }
 bool WorldGroundAction(oCNpc* actor,zCVob* vob,bool drop){
     if(worldConstructing||worldNativeDropPass||actor!=player||!CombatConnected())return false;
@@ -248,6 +270,13 @@ bool WorldGroundAction(oCNpc* actor,zCVob* vob,bool drop){
         const auto p=drop?player->GetPositionWorld()+player->GetAtVectorWorld()*100.0f:item->GetPositionWorld();tx.source.position={p[0],p[1]+(drop?75.0f:0.0f),p[2]};tx.source.name=drop?"ZK_DROP_"+tx.id:item->GetObjectName().ToChar();
         const auto role=HostCombat()?rc::Role::Local:rc::Role::Owner;
         LootLog("ground_request_begin","tx="+tx.id+" action="+std::to_string(static_cast<unsigned>(tx.action))+" item="+std::to_string(tx.item)+" amount="+std::to_string(tx.amount));
+        if(!drop){
+            worldGroundPending=tx.id;
+            RecoveryPersist(tx,role,[tx](){
+                if(!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Cannot reserve ground pickup");
+                rc::Message m;m.op=rc::Op::Request;m.request=NextLootRequest();m.tx=tx;QueueRecovery(m);LootLog("ground_request_queued","tx="+tx.id);
+            });return true;
+        }
         if(!recoveryStore.Put(tx,role))throw std::runtime_error("Cannot prepare ground operation");
         if(drop){
             std::set<oCItem*> before;auto* gameWorld=ogame->GetGameWorld();if(gameWorld->voblist_items)for(auto* it=gameWorld->voblist_items->GetNextInList();it;it=it->GetNextInList())before.insert(it->GetData());
@@ -317,10 +346,13 @@ void WorldReceive(const std::vector<std::uint8_t>& bytes){
         if(HostCombat()){
             const unsigned responseCookie=state.id;
             auto reply=[&](const co::Npc& answer){auto b=co::Encode(answer);b[0]=51;for(int i=3;i>=0;--i)b.insert(b.begin()+1,static_cast<unsigned char>(responseCookie>>(8*i)));QueueWorld(std::move(b));};
-            NpcBinding* match=nullptr;float closest=4000000,second=4000000;
-            for(auto& e:npcBindings){if(e->npc->GetInstance()!=state.instance||e->life==3)continue;const float d=Distance2(e->anchor,zVEC3(state.anchor[0],state.anchor[1],state.anchor[2]));if(d<closest){second=closest;closest=d;match=e.get();}else if(d<second)second=d;}
-            if(match&&std::sqrt(second)-std::sqrt(closest)>=100){auto answer=WorldNpcState(*match);reply(answer);}
-            else if(!match){state.id=nextNpcId++;state.life=3;state.generation=1;state.revision=++combatRevision;reply(state);}
+            bool waypointMatch=false;if(!state.sourceWaypoint.empty())for(auto& e:npcBindings)if(e->npc->GetInstance()==state.instance&&e->life!=3&&e->sourceWaypoint==state.sourceWaypoint)waypointMatch=true;
+            std::vector<NpcBinding*> candidates;std::vector<float> distances;
+            for(auto& e:npcBindings){if(e->npc->GetInstance()!=state.instance||e->life==3||(waypointMatch&&e->sourceWaypoint!=state.sourceWaypoint))continue;candidates.push_back(e.get());distances.push_back(Distance2(e->anchor,zVEC3(state.anchor[0],state.anchor[1],state.anchor[2])));}
+            const auto match=ws::MatchNpcProbe(distances,waypointMatch);
+            if(match.index>=0){auto answer=WorldNpcState(*candidates[match.index]);reply(answer);}
+            else if(match.provenAbsent){state.id=nextNpcId++;state.life=3;state.generation=1;state.revision=++combatRevision;reply(state);}
+            else LootLog("npc_probe_ambiguous","instance="+std::to_string(state.instance)+" waypoint="+state.sourceWaypoint+" reason=not_proven_absent");
             return;
         }
         NpcBinding* entry=nullptr;
@@ -369,7 +401,7 @@ void WorldFrame(unsigned long long now){
         lastWorldSend=now;int groundSent=0;for(auto& e:groundBindings){if(e->bound||e->probed||!e->item->homeWorld||!ws::Within(e->state.position,{player->GetPositionWorld()[0],player->GetPositionWorld()[1],player->GetPositionWorld()[2]},8000))continue;e->probed=true;auto probe=e->state;probe.id=static_cast<unsigned>(groundSent+1);probe.revision=1;auto b=ws::Encode(probe);b[0]=50;QueueWorld(std::move(b));if(++groundSent>=4)break;}
         int sent=0;for(auto& e:npcBindings){if(e->mirror||e->owned||CharacterLocal(e->npc)||Distance2(e->anchor,player->GetPositionWorld())>64000000.0f)continue;
             const auto key=std::to_string(e->npc->GetInstance())+":"+std::to_string(e->anchor[0])+":"+std::to_string(e->anchor[2]);if(npcProbes.count(key)&&timing::Elapsed(now,npcProbes[key])<5000)continue;
-            npcProbes[key]=now;if(e->probeCookie)npcProbeTargets.erase(e->probeCookie);if(npcProbeSerial>=999999){combatFailure="NPC probe sequence exhausted";break;}const auto serial=++npcProbeSerial;e->probeCookie=serial;npcProbeTargets[serial]=e.get();co::Npc probe;probe.id=serial;probe.instance=e->npc->GetInstance();probe.anchor={e->anchor[0],e->anchor[1],e->anchor[2]};probe.stats=ReadCombatStats(e->npc);auto b=co::Encode(probe);b[0]=49;QueueWorld(std::move(b));if(++sent>=4)break;
+            npcProbes[key]=now;if(e->probeCookie)npcProbeTargets.erase(e->probeCookie);if(npcProbeSerial>=999999){combatFailure="NPC probe sequence exhausted";break;}const auto serial=++npcProbeSerial;e->probeCookie=serial;npcProbeTargets[serial]=e.get();co::Npc probe;probe.id=serial;probe.instance=e->npc->GetInstance();probe.sourceWaypoint=e->sourceWaypoint;probe.anchor={e->anchor[0],e->anchor[1],e->anchor[2]};probe.stats=ReadCombatStats(e->npc);auto b=co::Encode(probe);b[0]=49;QueueWorld(std::move(b));if(++sent>=4)break;
         }
     }
     for(int i=0;i<8&&!worldOutbox.empty()&&lootOutbox.size()<48;++i){lootOutbox.push_back(std::move(worldOutbox.front()));worldOutbox.pop_front();}

@@ -37,7 +37,7 @@ void Diagnostics::Open(const std::string& directory, unsigned int maxBytes) {
     if (file_) {setvbuf(file_,nullptr,_IOFBF,65536);fseek(file_,0,SEEK_END);}
     events_=_fsopen((path_+".events.jsonl").c_str(),"ab",_SH_DENYNO);
     beginning_=_fsopen((path_+".begin.jsonl").c_str(),"ab",_SH_DENYNO);
-    if(events_)fseek(events_,0,SEEK_END);if(beginning_)fseek(beginning_,0,SEEK_END);
+    if(events_){setvbuf(events_,nullptr,_IOFBF,65536);fseek(events_,0,SEEK_END);}if(beginning_){setvbuf(beginning_,nullptr,_IOFBF,65536);fseek(beginning_,0,SEEK_END);}
 }
 void Diagnostics::Configure(int level, const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_); level_ = (std::max)(0,(std::min)(2,level)); name_=name;
@@ -78,10 +78,11 @@ void Diagnostics::Write(int level, const std::string& event, const std::string& 
             for(int i=3;i>=1;--i)MoveFileExA((eventPath+"."+std::to_string(i)).c_str(),(eventPath+"."+std::to_string(i+1)).c_str(),MOVEFILE_REPLACE_EXISTING);
             MoveFileExA(eventPath.c_str(),(eventPath+".1").c_str(),MOVEFILE_REPLACE_EXISTING);events_=_fsopen(eventPath.c_str(),"ab",_SH_DENYNO);if(events_)fseek(events_,0,SEEK_END);
         }
-        if(events_&&ftell(events_)>=0&&ftell(events_)<16*1024*1024){fwrite(line.data(),1,line.size(),events_);fflush(events_);}
+        if(events_&&ftell(events_)>=0&&ftell(events_)<16*1024*1024)fwrite(line.data(),1,line.size(),events_);
     }
     const auto now=GetTickCount64();
-    if(level<=1 || now-lastFlush_>=1000) { if(file_)fflush(file_);if(beginning_)fflush(beginning_);lastFlush_=now; }
+    const bool urgent=event=="test_marker"||event.find("error")!=std::string::npos||event.find("fault")!=std::string::npos;
+    if(urgent || now-lastFlush_>=250) { if(file_)fflush(file_);if(events_)fflush(events_);if(beginning_)fflush(beginning_);lastFlush_=now; }
 }
 void Diagnostics::Flush() { std::lock_guard<std::mutex> lock(mutex_); if(file_)fflush(file_);if(events_)fflush(events_);if(beginning_)fflush(beginning_); }
 }

@@ -16,3 +16,7 @@ Markers: Ctrl+Shift+M records the selected stable step; N/B changes it and D tog
 English plugin text does not certify an English original-game script profile. Alternative game editions need their own documented adapter acceptance.
 
 The bandit quest is not faction-specific. Other faction/campaign adapters and the following Vatras quest remain outside this native acceptance case. Interrupted-plan recovery and intentional corruption/termination tests belong in a separate backed-up test branch.
+
+## Alpha.41 targeted follow-up
+
+Preserve confirmed repeated Xardas dialogue, ordinary key-chest and basic pickup results from Alpha.40. Retest the gate in both directions/reconnect, peer weapon meshes and holstering, moving while the partner quickloots, stable corpse/unconscious pose, and repeated guest Cavalorn dialogue before continuing the bandit quest. Observe the approved artwork during the next ordinary load; do not force a crash. Native acceptance of Alpha.41 remains pending. Sleep/time, general pause, world/chapter transitions, automatic new save pairs and general companion handling are Beta work. Existing agreed loading of previously written saves is a separate Alpha.40 acceptance case.

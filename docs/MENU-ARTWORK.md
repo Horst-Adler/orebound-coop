@@ -28,3 +28,5 @@ Ninja's menu SRC format and independent menu parser are documented in the [offic
 Archive discovery is now validated: the alphanumeric basename `OreboundCore` matches `Ninja/OreboundCore`, and on-disk catalogue names are uppercase for native VDFS lookup. Compressed menu textures use one mip with dimensions divisible by four.
 
 Host display acceptance: the user confirmed the main menu, transparent windows, original logos, out-of-game submenus and startup transition. Native logs confirm apply/restore without the previous DXT texture-buffer error. No save was loaded for the checks; shared gameplay acceptance remains open.
+
+Alpha.41 adds native RGB565 replacements for `LOADING`, `LOADING_NEWWORLD`, `LOADING_OLDWORLD`, `LOADING_ADDONWORLD` and `LOADING_DRAGONISLAND` to the same optional matching artwork archive. The approved image, progress bars, original logos and native menu geometry are retained. Loading-picture acceptance is separate from coordinated world-transition support, which is Beta work.

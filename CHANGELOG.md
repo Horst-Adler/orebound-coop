@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.41
+
+- Fix mover discovery through the full world tree and explicit guest dialogue handoff.
+- Replicate terminal animation progress and visual-only partner weapons.
+- Persist hot loot paths on a data-only worker before effects/receipts; preserve source revisions and durability.
+- Use insertion waypoint identity and avoid false absence for distant/ambiguous NPCs.
+- Guard in-flight inventory writes at save entry and buffer routine diagnostics.
+- Extend separately supplied artwork to generic and four world loading screens.
+- Protocol 14; native acceptance pending. Move all five deferred party systems to Beta.
+
 ## 0.1.0-alpha.40
 
 - Share the full first native same-world victory XP; preserve unconscious/dead state.

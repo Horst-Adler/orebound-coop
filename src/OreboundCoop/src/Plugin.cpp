@@ -228,6 +228,7 @@ void LootReceive(const std::vector<std::uint8_t>&);
 void LootReset();
 bool RecoveryTransfer(oCItemContainer*,int);
 bool RecoveryCanLoot();
+bool RecoveryAsyncBusy();
 orebound::party::VictoryBefore PartyVictoryBefore(oCNpc*);
 void PartyVictoryAfter(oCNpc*,const orebound::party::VictoryBefore&);
 bool PartyRecoveryEffect(const recovery::Record&,bool,bool&);
@@ -799,7 +800,7 @@ void Initialize() {
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.40 initialized; protocol=13; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.41 initialized; protocol=14; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -964,8 +965,12 @@ void __fastcall SharedWriteSave(CGameManager*,void*,int);
 CInvoke<void(__thiscall*)(CGameManager*,int)> originalWriteSave(0x0042A2D0,&SharedWriteSave);
 void __fastcall SharedWriteSave(CGameManager* manager,void*,int slot){
     using namespace orebound::engine;
+    // A paused menu may have deferred the main-thread completion. Poll without
+    // waiting; only durable results may settle before save readiness is checked.
+    if(!loading&&player&&ogame&&ogame->GetWorld()&&RecoveryAsyncBusy())try{RecoveryPoll();}catch(const std::exception& e){RecoveryFail(e.what());}
     if(PartyQuestBusy()||PartyUniquePending()){notice=Ui("party.quest_wait");return;}
     if(!recoveryError.empty()||recoveryBlocked){notice=Ui("ui_8e0b6d63f3f2");LootLog("save_blocked",recoveryError);return;}
+    if(RecoveryAsyncBusy()){notice=Ui("recovery.disk_wait");LootLog("save_blocked","durable loot operation pending; retry after completion");return;}
     if(slot<0){originalWriteSave(manager,slot);return;}
     const auto saveBlock=orebound::session::SaveReadiness(SessionLocalReady(),havePeerReadiness?&peerReadiness:nullptr,CombatConnected(),network.PeerSaving(),clientLootShown||clientOpenRequest||(player&&player->inventory2.IsOpen()));
     if(saveBlock!=orebound::session::SaveBlock::Allowed){notice=orebound::session::SaveText(saveBlock);LootLog("save_blocked",notice);return;}
@@ -996,6 +1001,7 @@ CInvoke<void(__thiscall*)(oCGame*,int,int)> originalNativeWriteSave(0x006C5250,&
 void __fastcall SharedNativeWriteSave(oCGame* game,void*,int slot,int globals){
     using namespace orebound::engine;
     QuestRestoreConditions();
+    if(RecoveryAsyncBusy()){recoverySaveStarted=false;notice=Ui("recovery.disk_wait");LootLog("save_blocked","durable transfer pending before native write");return;}
     if(slot>=0&&recoverySaveSlot<0){notice=Ui("ui_6df9fa7c9425");LootLog("save_blocked","Unmanaged native save slot="+std::to_string(slot));return;}
     if(!recoveryError.empty()){recoverySaveStarted=false;LootLog("save_blocked","Recovery guard failed before native write");return;}
     originalNativeWriteSave(game,slot,globals);
@@ -1006,7 +1012,7 @@ CInvoke<int(__thiscall*)(CGameManager*,int)> originalSessionInput(0x0042AD50,&Co
 int __fastcall CoopSessionInput(CGameManager* manager,void*,int key){if(orebound::engine::SessionInput(key))return TRUE;return originalSessionInput(manager,key);}
 int __fastcall CoopGameSessionInput(oCGame*,void*,int);
 CInvoke<int(__thiscall*)(oCGame*,int)> originalGameSessionInput(0x006FC170,&CoopGameSessionInput);
-int __fastcall CoopGameSessionInput(oCGame* game,void*,int key){if(orebound::engine::SessionInput(key))return TRUE;return originalGameSessionInput(game,key);}
+int __fastcall CoopGameSessionInput(oCGame* game,void*,int key){if(orebound::engine::SessionInput(key))return TRUE;orebound::engine::WorldTalkInput(key);return originalGameSessionInput(game,key);}
 int __fastcall CoopQuestCondition(oCInfo*,void*);
 CInvoke<int(__thiscall*)(oCInfo*)> originalQuestCondition(0x00703950,&CoopQuestCondition);
 int __fastcall CoopQuestCondition(oCInfo* info,void*){if(!orebound::engine::QuestAllowInfo(info))return FALSE;return originalQuestCondition(info);}
@@ -1168,6 +1174,7 @@ void __fastcall SharedGameDone(oCGame* game,void*){
 CInvoke<int(__thiscall*)(CGameManager*,int)> originalGameInput(0x0042AD50,&SharedGameInput);
 int __fastcall SharedGameInput(CGameManager* manager,void*,int key){
     if(orebound::engine::LootCancelInput(key))return TRUE;
+    orebound::engine::WorldTalkInput(key);
     return originalGameInput(manager,key);
 }
 int __fastcall SharedItemTransfer(oCItemContainer*,void*,int,int);
