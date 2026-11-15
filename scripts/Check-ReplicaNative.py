@@ -21,6 +21,7 @@ world=(src/'WorldBridge.inl').read_text(encoding='utf-8')
 intent=world.split('void WorldTalkInput(int key){',1)[1].split('void WorldTalkFrame',1)[0]
 assert 'IsBinded(GAME_ACTION' in intent and 'GetFocusNpc()' in intent
 assert '!it->second->mirror' in intent and 'HostCombat()' in intent
+assert '||npc->enemy||' not in intent and 'desired.guestAttitude<NPC_ATT_NEUTRAL' in intent
 assert intent.index('WorldBeginTalk(npc,player)')<intent.index('em->Clear()')
 character=(src/'CharacterBridge.inl').read_text(encoding='utf-8')
 weapons=character.split('void CharacterApplyWeapons(){',1)[1].split('void CharacterApplyPeerVisual()',1)[0]

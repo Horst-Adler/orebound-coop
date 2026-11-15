@@ -53,17 +53,20 @@ void WorldTalkInput(int key){
     if(!CombatConnected()||HostCombat()||!player||!zinput||zCMenu::GetActive()||!rulesReady||!CharacterReady()||!recoveryReady)return;
     if(!zinput->IsBinded(GAME_ACTION,static_cast<unsigned short>(key))||player->GetWeaponMode()!=0||player->interactMob||player->inventory2.IsOpen()||player->IsDead()||player->IsUnconscious())return;
     auto* npc=player->GetFocusNpc();
-    if(!npc||npc==PartnerNpc()||!npc->IsHuman()||npc->IsDead()||npc->IsUnconscious()||npc->GetWeaponMode()!=0||npc->interactMob||npc->enemy||Distance2(player->GetPositionWorld(),npc->GetPositionWorld())>250000)return;
+    if(!npc||npc==PartnerNpc()||!npc->IsHuman()||npc->IsDead()||npc->IsUnconscious()||npc->GetWeaponMode()!=0||npc->interactMob||Distance2(player->GetPositionWorld(),npc->GetPositionWorld())>250000)return;
     auto& info=oCInformationManager::GetInformationManager();
     if(!info.IsDone||worldTalkLease.npc||!CombatMirror(npc))return;
     const auto it=npcByPointer.find(npc);if(it==npcByPointer.end()||!it->second->mirror)return;
+    // A mirrored local enemy pointer can outlive the host's fight. Decide from
+    // the host's personal relations and weapon mode, not stranded local AI.
+    if(it->second->desired.guestAttitude<NPC_ATT_NEUTRAL||it->second->desired.guestTemporary<NPC_ATT_NEUTRAL){CombatLog("dialog_intent_denied","id="+std::to_string(it->second->id)+" reason=host_relation");return;}
     // Release only the player's explicit talk target BEFORE CanBeTalkedTo checks
     // queued use-item/routine work. Frozen ambient messages cannot finish while
     // mirrored AI is intentionally suppressed. Never clear authoritative AI.
     auto* em=npc->GetEM(FALSE);const int queued=em?em->GetNumMessages():0;
-    CombatLog("dialog_intent","id="+std::to_string(it->second->id)+" body="+std::to_string(npc->GetBodyState())+" ai="+std::to_string(npc->state.GetState())+" queued="+std::to_string(queued)+" interact_item="+std::to_string(npc->interactItem!=nullptr));
+    CombatLog("dialog_intent","id="+std::to_string(it->second->id)+" body="+std::to_string(npc->GetBodyState())+" ai="+std::to_string(npc->state.GetState())+" queued="+std::to_string(queued)+" interact_item="+std::to_string(npc->interactItem!=nullptr)+" stale_enemy="+std::to_string(npc->enemy!=nullptr)+" can_talk="+std::to_string(npc->CanTalk()));
     if(!WorldBeginTalk(npc,player))return;
-    if(em)em->Clear();npc->state.ClearAIState();npc->SetInteractItem(nullptr);
+    if(em)em->Clear();npc->SetEnemy(nullptr);npc->state.ClearAIState();npc->SetInteractItem(nullptr);
     npc->SetBodyState(BS_STAND);SetCombatAnimation(npc->GetModel(),"S_STAND");
     CombatLog("dialog_handoff","id="+std::to_string(it->second->id)+" queue_after="+std::to_string(em?em->GetNumMessages():0));
 }

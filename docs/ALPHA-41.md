@@ -67,3 +67,5 @@ document is not a claim of completed native gameplay or a public binary release.
 ## Installation verification
 
 The host, portable copy and actual guest installation have matching 42-file content profiles. The DLL and optional own artwork archive are the only changed runtime contents relative to Alpha.40. All 1,692 renderer files per installation were retained; 191 host and 148 guest save/state/log files were preserved. The host, headless guest and independent public source build pass 11,562 technical assertions. The host also passed interactive keyboard checks. 81 own source files were compared with the implementation used for deployment. Native gameplay acceptance remains pending; no game was started.
+
+Final inspection also removed a stranded local enemy pointer as an independent guest talk blocker. The host-supplied personal relations and weapon mode guard explicit peaceful-target handoff; the stale local reference is cleared only at that handoff. Diagnostics include the prior reference and talk readiness.
