@@ -1,6 +1,6 @@
 # Orebound Co-op – deutsche Kurzanleitung
 
-Aktueller Entwicklungsstand: Alpha.39, Protokoll 12 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
+Aktueller Entwicklungsstand: Alpha.40, Protokoll 13 und Ninja-Skript-ABI 2. Gemeinsame Spielabnahme offen. Bestehende Charakterprofile, Spielstände und Inventarjournale bleiben bei Updates erhalten.
 
 Die eigene Oberfläche unterstützt Deutsch und Englisch. Auswahl: **Union & Plugins → Orebound Co-op → Sprache / Language**. Nach der Auswahl Einstellungen speichern. Die Sprache gilt lokal; beide PCs können unterschiedlich eingestellt sein. Öffentliche Neuinstallationen verwenden Englisch, bestehende Profile werden bei der Migration standardmäßig Deutsch behalten.
 
@@ -12,8 +12,10 @@ Polnisch und Russisch sind für die Vollversion vorgesehen. Produktive Arbeitswe
 
 Optionales eigenes Startmenübild mit transparentem inneren Menüfenster und erhaltenen Gothic-II-Logos. Passendes eigenes Bildpaket separat erforderlich; Menübild bestätigt; Spielabnahme offen. [Anleitung](docs/MENU-ARTWORK.md).
 
-Alpha.37 ergänzt den zuvor umgangenen normalen Aktionspfad bei Kisten/Leichen, toleriert leere Sprint-Tastenbelegungen und unterstützt die optionale weibliche Alltagskleidung als separat lokal gebautes Ressourcenarchiv. Kleidung vom Benutzer bestätigt; erneute Spielprüfung von Entnahme und Einlagern bleibt offen. [Änderungen](docs/ALPHA-37.md).
+Alpha.37 ergänzt den zuvor umgangenen normalen Aktionspfad bei Kisten/Leichen, toleriert leere Sprint-Tastenbelegungen und unterstützt die optionale weibliche Alltagskleidung als separat lokal gebautes Ressourcenarchiv. Kleidung und normale Kistenentnahme vom Benutzer bestätigt; Einlagern und weitere Quellen brauchen eigene Abnahme. [Änderungen](docs/ALPHA-37.md).
 
 [Alpha.38: native Menuebedienung](docs/ALPHA-38.md). Hoch/Runter waehlt die Zeile, Links/Rechts aendert den Wert. Anschliessend Einstellungen speichern. Die weibliche Alltagskleidung ist bestaetigt.
 
-[Alpha.39](docs/ALPHA-39.md): Schlüsselöffnung, Interaktionsabbruch, Gesprächsabschluss und einfache gemeinsame Gitter. Beide PCs auf Protokoll 12 aktualisieren; native Wiederholung erforderlich.
+[Alpha.39](docs/ALPHA-39.md): Schlüsselöffnung, Interaktionsabbruch, Gesprächsabschluss und einfache gemeinsame Gitter. Diese Änderungen bleiben im aktuellen Build enthalten; native Wiederholung mit Alpha.40 / Protokoll 13 erforderlich.
+
+[Alpha.40](docs/ALPHA-40.md): volle Kampf-EP in derselben Welt, bestätigte Cavalorn-Entscheidungen auch vom Client, Missions-/Schlüsselberechtigungen und gemeinsames Laden bereits vorhandener Spielstände nach Zustimmung. Fraktionspfade werden bei der Vergabe ausgewertet; allgemeine Fraktionsquestadapter und Kampagnensynchronisierung sind noch nicht freigegeben. Keine Wiederbelebung und keine automatischen gemeinsamen Speicherungen. Neue Spielabnahme offen.

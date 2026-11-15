@@ -6,7 +6,7 @@
 
 namespace orebound { namespace net {
 
-constexpr std::uint16_t ProtocolVersion = 12;
+constexpr std::uint16_t ProtocolVersion = 13;
 constexpr std::uint32_t ProtocolMagic = 0x5A434F50u;
 constexpr std::size_t ProtocolHeaderBytes = 32;
 constexpr std::size_t MaximumDatagramBytes = 1024;

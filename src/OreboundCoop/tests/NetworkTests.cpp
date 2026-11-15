@@ -14,6 +14,8 @@
 #include "coop/WorldProtocol.h"
 #include "coop/MechanismProtocol.h"
 #include "coop/SessionProtocol.h"
+#include "coop/PartyControl.h"
+#include "coop/PartyQuest.h"
 #include "coop/CavalornPolicy.h"
 #include "coop/QolPolicy.h"
 #include "coop/Extensions.h"
@@ -349,6 +351,7 @@ void TestKeyboardLayout() {
 #include "SessionTests.inl"
 #include "QolTests.inl"
 #include "TimingTests.inl"
+#include "PartyTests.inl"
 int main(int argc,char** argv) {
     const bool headless=argc==2&&std::strcmp(argv[1],"--headless")==0;
     if(argc>2||(argc==2&&!headless)){
@@ -399,6 +402,7 @@ int main(int argc,char** argv) {
         TestSaveAnnouncementLoss();
         TestSessionCodecsAndTransport();
         TestCavalornRewards();
+        TestPartyRules();TestPartyDecisions();TestPartyControl();TestPartyResources();TestPartyAwards();TestPartyReliableFlow();
         TestCharacterRules();
         TestExtensions();
         TestLocalization();

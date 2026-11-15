@@ -18,6 +18,7 @@ std::size_t npcCursor=0;
 std::string combatFailure;
 struct DeferredHit {co::Damage damage;unsigned long long at;};
 std::deque<DeferredHit> deferredHits;
+std::deque<co::Bytes> menuDeferredEvents;
 
 oCNpc* PartnerNpc(){return remote?zDYNAMIC_CAST<oCNpc>(remote):nullptr;}
 bool CombatConnected(){return combatSession&&network.GetState()==net::State::Connected&&!loading&&!saving;}
@@ -26,7 +27,7 @@ float Distance2(const zVEC3& a,const zVEC3& b){const auto d=a-b;return d[0]*d[0]
 void CombatLog(const char* event,const std::string& detail){diagnostics.Write(1,event,detail);}
 void CombatReset(){
     const bool resetHost=combatSessionHost;
-    LootReset();WorldReset();SessionReset();CharacterSessionReset();
+    PartyReset();LootReset();WorldReset();SessionReset();CharacterSessionReset();
     auto* partner=PartnerNpc();
     if(partner&&player){if(player->enemy==partner)player->SetEnemy(nullptr);if(player->GetFocusVob()==partner)player->SetFocusVob(nullptr);}
     for(auto& entry:npcBindings){
@@ -40,7 +41,7 @@ void CombatReset(){
         if(entry->owned&&n->homeWorld){if(resetHost&&entry->desired.owner==co::GuestPlayer&&ogame&&ogame->spawnman)ogame->spawnman->DeleteNpc(n);else n->RemoveVobFromWorld();}
         n->Release();
     }
-    npcBindings.clear();npcByPointer.clear();npcById.clear();mappingWarnings.clear();deferredHits.clear();
+    menuDeferredEvents.clear();npcBindings.clear();npcByPointer.clear();npcById.clear();mappingWarnings.clear();deferredHits.clear();
     combatSession=false;combatSessionHost=false;havePeerCombat=false;rulesReady=false;ruleRevision=0;combatRevision=0;nextNpcId=1;npcCursor=0;
     lastCombatSend=lastNpcScan=lastAggro=lastAggroLog=0;combatFailure.clear();peerCombat=co::Peer{};
 }
@@ -244,7 +245,7 @@ void CombatFrame(unsigned long long now,float elapsed){
         }
     }
     UpdateCombatActor();
-    for(int i=0;i<64&&network.ConsumeEvent(bytes);++i){if(!bytes.empty()&&(bytes[0]==52||bytes[0]==53)){MechanismReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
+    for(int i=0;i<64&&(!menuDeferredEvents.empty()||network.ConsumeEvent(bytes));++i){if(!menuDeferredEvents.empty()){bytes=std::move(menuDeferredEvents.front());menuDeferredEvents.pop_front();}if(!bytes.empty()&&(bytes[0]==81||bytes[0]==82)){PartyQuestReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]==80){PartyReceiveControl(bytes);continue;}if(!bytes.empty()&&(bytes[0]==52||bytes[0]==53)){MechanismReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=70&&bytes[0]<=73){CharacterReceive(bytes);continue;}if(!bytes.empty()&&bytes[0]>=60&&bytes[0]<=62){SessionReceive(bytes);continue;}if(!bytes.empty()&&(bytes[0]>=48&&bytes[0]<=51)){WorldReceive(bytes);continue;}if(recovery::IsMessage(bytes)){RecoveryReceive(bytes);continue;}if(loot::IsMessage(bytes)){LootReceive(bytes);continue;}co::Damage hit;if(co::Decode(bytes,hit)){if(deferredHits.size()>=64){combatFailure="Combat application queue full";break;}deferredHits.push_back({hit,now});}else CombatLog("combat_reject","malformed reliable payload");}
     while(!deferredHits.empty()){
         auto& hit=deferredHits.front();if(!ExecuteCombatHit(hit.damage)){if(timing::Elapsed(now,hit.at)>3000)combatFailure="Combat target not mapped before event timeout";break;}deferredHits.pop_front();
     }

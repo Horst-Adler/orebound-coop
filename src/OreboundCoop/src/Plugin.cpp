@@ -26,6 +26,9 @@
 #include "coop/NativeSave.h"
 #include "coop/WorldProtocol.h"
 #include "coop/MechanismProtocol.h"
+#include "coop/PartyRules.h"
+#include "coop/PartyControl.h"
+#include "coop/PartyQuest.h"
 #include "coop/SessionProtocol.h"
 #include "coop/CavalornPolicy.h"
 #include "coop/QolPolicy.h"
@@ -54,6 +57,8 @@ static constexpr unsigned int kEngine = Engine_G2A;
 #else
 #error Build the adapter with __G1 or __G2A.
 #endif
+
+namespace { void PartyNativeLoad(int); void PartyNativeInfo(Gothic_II_Addon::oCInfo*); int PartyNativeCondition(Gothic_II_Addon::oCInfo*); }
 
 namespace orebound::engine {
 using namespace gothic;
@@ -223,6 +228,21 @@ void LootReceive(const std::vector<std::uint8_t>&);
 void LootReset();
 bool RecoveryTransfer(oCItemContainer*,int);
 bool RecoveryCanLoot();
+orebound::party::VictoryBefore PartyVictoryBefore(oCNpc*);
+void PartyVictoryAfter(oCNpc*,const orebound::party::VictoryBefore&);
+bool PartyRecoveryEffect(const recovery::Record&,bool,bool&);
+void PartyReceiveReward(const recovery::Message&);
+void PartyRewardsFrame(unsigned long long);
+void PartyReset();
+void PartyControlReset();
+void PartyInitControl();
+void PartyControlFrame(unsigned long long);
+void PartyReceiveControl(const combat::Bytes&);
+void PartySavedAt(int);
+bool PartyBeforeRead(int);
+void PartyAfterRead(int);
+void PartyProcessLoad();
+void Start(bool);
 std::string RecoveryPendingUnlock(oCMobContainer*);
 int RecoveryUnlockDecision(const std::string&);
 void MechanismReset();
@@ -289,6 +309,17 @@ bool QuestRecoveryEffect(const recovery::Record&,bool,bool&);
 void QuestReceiveReward(const recovery::Message&);
 void QuestFrame(unsigned long long);
 bool QuestAllowInfo(oCInfo*);
+bool PartyUniquePending();
+bool PartyUniqueEffect(const recovery::Record&);
+void PartyUniqueReceipt(const recovery::Message&);
+unsigned PartyResourceRevision();
+bool PartyQuestBusy();
+oCNpc* PartyQuestActor();
+bool PartyQuestDecisionBefore(oCInfo*);
+void PartyQuestDecisionAfter(oCInfo*);
+void PartyQuestReceive(const combat::Bytes&);
+void PartyQuestReset();
+bool PartySharedKey(oCMobLockable*,oCNpc*);
 unsigned QolSprint(oCNpc*);
 void QolApplySprint(oCNpc*,unsigned);
 bool QolPrepareCorpse(oCNpc*);
@@ -304,6 +335,9 @@ void QolNotify(unsigned,unsigned);
 #include "QolBridge.inl"
 #include "CharacterBridge.inl"
 #include "SummonBridge.inl"
+#include "PartyRewardsBridge.inl"
+#include "PartyControlBridge.inl"
+#include "PartyQuestBridge.inl"
 
 void RemoveProxy() {
     if (remote) {
@@ -539,7 +573,7 @@ void Start(bool asHost) {
     if(!ExtensionValidate())return;
     const net::Compatibility compatibility{kEngine, net::HashString(contentId), net::HashString(sessionWorld)};
     diagnostics.Role(asHost?"HOST":"CLIENT");
-    diagnostics.Write(1,"session_start","name="+options.name+" host="+hostAddress+" port="+std::to_string(port)+" world="+sessionWorld+" content="+contentId+" protocol=12");
+    diagnostics.Write(1,"session_start","name="+options.name+" host="+hostAddress+" port="+std::to_string(port)+" world="+sessionWorld+" content="+contentId+" protocol=13");
     const bool started = asHost ? network.StartHost(port, compatibility, Now(),hostAddress) :
                                  network.Connect(hostAddress, port, compatibility, Now(),options.client);
     Log(std::string("Session role=")+(asHost?"Host":"Client")+" bind="+(asHost?hostAddress:options.client));
@@ -758,14 +792,14 @@ void Initialize() {
     const auto legacyLogs=systemDirectory+"\\ZweiklangLogs";
     diagnostics.Open(GetFileAttributesA(legacyLogs.c_str())!=INVALID_FILE_ATTRIBUTES?legacyLogs:systemDirectory+"\\OreboundLogs");diagnosticsReady=true;
     i18n::missingSink=[](const std::string& key){diagnostics.Write(1,"localization_missing","key="+key+" fallback=en");};
-    RecoveryInit();
+    RecoveryInit();PartyInitControl();
     network.SetTraceSink([](const std::string& detail){diagnostics.Write(2,"packet",detail);});
     ReadConfiguration();
     faultFile=CreateFileA((diagnostics.Path()+".faults.jsonl").c_str(),FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.39 initialized; protocol=12; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.40 initialized; protocol=13; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -821,10 +855,14 @@ void Frame() {
         ApplyRemote(now, elapsed);
         WorldFrame(now);
         MechanismFrame(now);
+        PartyRewardsFrame(now);
+        PartyQuestFrame(now);
         if(!combatFailure.empty()){const auto reason=combatFailure;Leave(reason.c_str());}
     } else if (remote) RemoveProxy();
     QolFrame(now);
     SessionFrame(now);
+    PartyControlFrame(now);
+    if(partyLoadDue&&Now()>=partyLoadDue&&zCMenu::activeList.GetNumInList()==0){PartyProcessLoad();return;}
     QuestFrame(now);
     RenderStatus();
 }
@@ -833,7 +871,15 @@ void MenuFrame() {
     // Keep transport responsive in menus without touching world/visual objects.
     network.Poll(Now());
     ReportNetworkStatus();
+    co::Bytes event;
+    for(int n=0;n<64&&network.ConsumeEvent(event);++n){
+        if(!event.empty()&&event[0]==80)PartyReceiveControl(event);
+        else if(menuDeferredEvents.size()<8192)menuDeferredEvents.push_back(std::move(event));
+        else {combatFailure="Menu deferred event queue full";break;}
+    }
+    PartyControlFrame(Now());
     auto* menu=zCMenu::GetActive();
+    PartyMenuRefresh(menu);
     if(menu&&_stricmp(menu->GetName().ToChar(),"MENU_ZWEIKLANG_COOP")==0){PreviewUnionLanguage(menu);SyncRoleAddress(menu);}
     static zCMenu* localizedMenu=nullptr;static int localizedLanguage=-1;
     if(menu&&(menu!=localizedMenu||localizedLanguage!=static_cast<int>(i18n::Get()))){LocalizeUnionMenu(menu);localizedMenu=menu;localizedLanguage=static_cast<int>(i18n::Get());}
@@ -871,7 +917,7 @@ void BeforeLoad() {
     CharacterClearForms();
     QolReset();
 }
-void BeforeNewGame(){BeforeLoad();CharacterNewGame();freshGamePending=true;recoveryTimeline.clear();recoveryEffects.clear();recoveryReady=false;recoveryLastReplay=0;recoveryLastWorld.clear();if(recoveryStoreReady){recoveryError.clear();recoveryBlocked=false;}}
+void BeforeNewGame(){PartyAbandonResume();BeforeLoad();CharacterNewGame();freshGamePending=true;recoveryTimeline.clear();recoveryEffects.clear();recoveryReady=false;recoveryLastReplay=0;recoveryLastWorld.clear();if(recoveryStoreReady){recoveryError.clear();recoveryBlocked=false;}}
 void AfterLoad() { CharacterClearForms();ExtensionReset();QolReset();appearancePlayer=nullptr;appliedAppearance=-1; loading = false; saving = false;
     if(freshGamePending){freshGamePending=false;try{
         if(!recoveryStoreReady||!recoveryError.empty())throw std::runtime_error("Fresh game recovery store unavailable");
@@ -896,19 +942,29 @@ int __fastcall CoopCanCollide(oCAIHuman* ai,void*,zCVob* other){
 }
 void __fastcall SharedReadSave(CGameManager*,void*,int);
 CInvoke<void(__thiscall*)(CGameManager*,int)> originalReadSave(0x0042A040,&SharedReadSave);
-void __fastcall SharedReadSave(CGameManager* manager,void*,int slot){if(slot<0){originalReadSave(manager,slot);return;}orebound::engine::RecoveryBeginLoad(slot);originalReadSave(manager,slot);orebound::engine::RecoveryEndLoad();}
+void __fastcall SharedReadSave(CGameManager* manager,void*,int slot){
+    using namespace orebound::engine;
+    if(slot<0){originalReadSave(manager,slot);return;}
+    if(!PartyBeforeRead(slot))return;
+    RecoveryBeginLoad(slot);originalReadSave(manager,slot);RecoveryEndLoad();PartyAfterRead(slot);
+}
+void PartyNativeLoad(int slot){SharedReadSave(gameMan,nullptr,slot);}
+void __fastcall SharedNativeMenu(CGameManager*,void*,int);
+CInvoke<void(__thiscall*)(CGameManager*,int)> originalNativeMenu(0x004292D0,&SharedNativeMenu);
+void __fastcall SharedNativeMenu(CGameManager* manager,void*,int mode){originalNativeMenu(manager,mode);orebound::engine::PartyProcessLoad();}
 void __fastcall SharedNativeReadSave(oCGame*,void*,int,int);
 CInvoke<void(__thiscall*)(oCGame*,int,int)> originalNativeReadSave(0x006C67D0,&SharedNativeReadSave);
 void __fastcall SharedNativeReadSave(oCGame* game,void*,int slot,int globals){
     using namespace orebound::engine;
     // Cover direct load paths as well as CGameManager; never bind twice.
     const bool bind=slot>=0&&!recoveryLoading;
-    if(bind)RecoveryBeginLoad(slot);originalNativeReadSave(game,slot,globals);if(bind)RecoveryEndLoad();
+    if(bind&&!PartyBeforeRead(slot))return;if(bind)RecoveryBeginLoad(slot);originalNativeReadSave(game,slot,globals);if(bind){RecoveryEndLoad();PartyAfterRead(slot);}
 }
 void __fastcall SharedWriteSave(CGameManager*,void*,int);
 CInvoke<void(__thiscall*)(CGameManager*,int)> originalWriteSave(0x0042A2D0,&SharedWriteSave);
 void __fastcall SharedWriteSave(CGameManager* manager,void*,int slot){
     using namespace orebound::engine;
+    if(PartyQuestBusy()||PartyUniquePending()){notice=Ui("party.quest_wait");return;}
     if(!recoveryError.empty()||recoveryBlocked){notice=Ui("ui_8e0b6d63f3f2");LootLog("save_blocked",recoveryError);return;}
     if(slot<0){originalWriteSave(manager,slot);return;}
     const auto saveBlock=orebound::session::SaveReadiness(SessionLocalReady(),havePeerReadiness?&peerReadiness:nullptr,CombatConnected(),network.PeerSaving(),clientLootShown||clientOpenRequest||(player&&player->inventory2.IsOpen()));
@@ -932,6 +988,7 @@ void __fastcall SharedWriteSave(CGameManager* manager,void*,int slot){
         Log("Save completed and checkpoint verified; connected="+std::to_string(CombatConnected()));
     }
     else {notice=Ui("ui_b500e0f005b2");Log("Save verification failed: "+recoveryError);}
+    if(recoveryReady&&recoveryError.empty())PartySavedAt(slot);
     recoverySaveSlot=-1;recoverySaveStarted=false;
 }
 void __fastcall SharedNativeWriteSave(oCGame*,void*,int,int);
@@ -955,10 +1012,27 @@ CInvoke<int(__thiscall*)(oCInfo*)> originalQuestCondition(0x00703950,&CoopQuestC
 int __fastcall CoopQuestCondition(oCInfo* info,void*){if(!orebound::engine::QuestAllowInfo(info))return FALSE;return originalQuestCondition(info);}
 void __fastcall CoopQuestInformation(oCInfo*,void*);
 CInvoke<void(__thiscall*)(oCInfo*)> originalQuestInformation(0x00703970,&CoopQuestInformation);
-void __fastcall CoopQuestInformation(oCInfo* info,void*){using namespace orebound::engine;if(!QuestAllowInfo(info))return;const auto before=QuestBeforeInfo(info);originalQuestInformation(info);QuestAfterInfo(before);}
+void __fastcall CoopQuestInformation(oCInfo* info,void*){using namespace orebound::engine;if(!QuestAllowInfo(info)||!PartyQuestDecisionBefore(info))return;const auto before=QuestBeforeInfo(info);originalQuestInformation(info);QuestAfterInfo(before);PartyQuestDecisionAfter(info);}
+void PartyNativeInfo(oCInfo* info){originalQuestInformation(info);}
+int PartyNativeCondition(oCInfo* info){return originalQuestCondition(info);}
+void __fastcall PartyInfoUpdate(oCInformationManager*);
+CInvoke<void(__fastcall*)(oCInformationManager*)> originalPartyInfoUpdate(0x00660BB0,&PartyInfoUpdate);
+void __fastcall PartyInfoUpdate(oCInformationManager* manager){if(orebound::engine::PartyQuestBusy()&&!orebound::engine::HostCombat())return;originalPartyInfoUpdate(manager);}
 void __fastcall CoopInfoManagerDestroy(oCInfoManager*,void*);
 CInvoke<void(__thiscall*)(oCInfoManager*)> originalInfoManagerDestroy(0x00702720,&CoopInfoManagerDestroy);
 void __fastcall CoopInfoManagerDestroy(oCInfoManager* manager,void*){using namespace orebound::engine;if(manager==questCheckedInfoManager){questOriginalConditions.clear();questCheckedInfoManager=nullptr;questCheckedParser=nullptr;}originalInfoManagerDestroy(manager);}
+oCItem* __fastcall PartyFindItem(oCNpc*,void*,int,int);
+CInvoke<oCItem*(__thiscall*)(oCNpc*,int,int)> originalPartyFindItem(0x007491E0,&PartyFindItem);
+oCItem* __fastcall PartyFindItem(oCNpc* actor,void*,int instance,int count){auto* own=originalPartyFindItem(actor,instance,count);if(own)return own;return orebound::engine::PartyPermission(actor,instance,count);}
+oCItem* __fastcall PartyRemoveItem(oCNpc*,void*,int,int);
+CInvoke<oCItem*(__thiscall*)(oCNpc*,int,int)> originalPartyRemoveItem(0x007495F0,&PartyRemoveItem);
+oCItem* __fastcall PartyRemoveItem(oCNpc* actor,void*,int instance,int count){if(!originalPartyFindItem(actor,instance,count)){try{if(auto* shared=orebound::engine::PartyConsumePermission(actor,instance,count))return shared;}catch(const std::exception& e){orebound::engine::RecoveryFail(e.what());return nullptr;}}return originalPartyRemoveItem(actor,instance,count);}
+oCItem* __fastcall PartyRemoveItemPointer(oCNpc*,void*,oCItem*,int);
+CInvoke<oCItem*(__thiscall*)(oCNpc*,oCItem*,int)> originalPartyRemoveItemPointer(0x007495A0,&PartyRemoveItemPointer);
+oCItem* __fastcall PartyRemoveItemPointer(oCNpc* actor,void*,oCItem* item,int count){using namespace orebound::engine;if(item){const auto it=partyPermissionHandles.find(item->GetInstance());if(it!=partyPermissionHandles.end()&&it->second==item){try{return PartyConsumePermission(actor,item->GetInstance(),count);}catch(const std::exception& e){RecoveryFail(e.what());return nullptr;}}}return originalPartyRemoveItemPointer(actor,item,count);}
+oCItem* __fastcall PartyEquippedArmor(oCNpc*,void*);
+CInvoke<oCItem*(__thiscall*)(oCNpc*)> originalPartyEquippedArmor(0x00737B50,&PartyEquippedArmor);
+oCItem* __fastcall PartyEquippedArmor(oCNpc* actor,void*){oCItem* item=nullptr;if(orebound::engine::PartyQuestArmorOverride(actor,item))return item;return originalPartyEquippedArmor(actor);}
 void __fastcall SharedUnlock(oCMobLockable*,void*,oCNpc*,int);
 CInvoke<void(__thiscall*)(oCMobLockable*,oCNpc*,int)> originalUnlock(0x00724A70,&SharedUnlock);
 void __fastcall SharedUnlock(oCMobLockable* lock,void*,oCNpc* who,int mode){
@@ -972,8 +1046,10 @@ void __fastcall SharedLockInteraction(oCMobLockable* lock,void*,oCNpc* who,int a
     using namespace orebound::engine;
     // The native key branch writes locked directly, bypassing Unlock().
     if(who==player&&CombatConnected()&&!RecoveryCanLoot())return;
+    const bool shared=PartySharedKey(lock,who);
     const bool key=who==player&&lock->locked&&lock->keyInstance.Length()>0&&who->IsInInv(lock->keyInstance,1);
-    auto tx=key?RecoveryUnlockBegin(lock,who):orebound::recovery::Tx{};
+    auto tx=(key||shared)?RecoveryUnlockBegin(lock,who):orebound::recovery::Tx{};
+    if(shared&&!tx.id.empty())lock->SetLocked(FALSE);
     const bool capturing=!tx.id.empty();
     if(capturing)++recoveryUnlockDepth;originalLockInteraction(lock,who,a,b,c,d,e);if(capturing)--recoveryUnlockDepth;
     RecoveryUnlockEnd(lock,tx);
@@ -987,7 +1063,14 @@ void __fastcall SharedDamage(oCNpc* npc,void*,oCNpc::oSDamageDescriptor& damage)
 }
 int __fastcall SharedAIState(oCNpc_States*,void*);
 CInvoke<int(__thiscall*)(oCNpc_States*)> originalAIState(0x0076D1A0,&SharedAIState);
-int __fastcall SharedAIState(oCNpc_States* state,void*){using namespace orebound::engine;if(CombatMirror(state->npc)||CharacterWaitingForOwner(state->npc))return FALSE;CharacterGuestScope context(CharacterGuestTarget(state->npc),state->npc);if(context.failed)return FALSE;return originalAIState(state);}
+int __fastcall SharedAIState(oCNpc_States* state,void*){
+    using namespace orebound::engine;
+    if(CombatMirror(state->npc)||CharacterWaitingForOwner(state->npc))return FALSE;
+    CharacterGuestScope context(CharacterGuestTarget(state->npc),state->npc);if(context.failed)return FALSE;
+    auto* npc=state->npc;const auto before=PartyVictoryBefore(npc);
+    struct Hold {oCNpc* npc;explicit Hold(oCNpc* n):npc(n){if(npc)npc->AddRef();}~Hold(){if(npc)npc->Release();}} hold(before.eligible?npc:nullptr);
+    const auto result=originalAIState(state);PartyVictoryAfter(npc,before);return result;
+}
 void __fastcall SharedHumanAI(oCAIHuman*,void*,zCVob*,int&);
 CInvoke<void(__thiscall*)(oCAIHuman*,zCVob*,int&)> originalHumanAI(0x0069BAB0,&SharedHumanAI);
 void __fastcall SharedHumanAI(oCAIHuman* ai,void*,zCVob* vob,int& remove){
@@ -1136,6 +1219,7 @@ void __fastcall MenuInit(zCMenu* menu,void*) {
         orebound::engine::Log("Main menu context: game_running="+std::to_string(gameMan&&gameMan->IsGameRunning())+" native_ingame="+std::to_string(zCMenu::inGameMenu)+" exit_session="+std::to_string(gameMan?gameMan->exitSession:-1));
     orebound::engine::ApplyMenuArtwork(menu);
     orebound::engine::LocalizeUnionMenu(menu);
+    orebound::engine::PartyMenuRefresh(menu);
     if(IsCoopMenu(menu)){
         orebound::engine::PreviewUnionLanguage(menu);
         orebound::engine::RefreshUnionInputs(menu);
@@ -1163,6 +1247,9 @@ void __fastcall MenuDone(zCMenu* menu,void*) {
     originalMenuDone(menu);
 }
 int __fastcall MenuAction(zCMenu* menu,void*,zTMenuItemSelAction action,zSTRING const& command,zCMenuItem* item) {
+    if(menu&&_stricmp(menu->GetName().ToChar(),"MENU_OREBOUND_SESSION")==0&&action==SEL_ACTION_EXECCOMMANDS&&orebound::engine::PartyMenuAction(command)){
+        orebound::engine::PartyMenuRefresh(menu);menu->ClearAllEvents();menu->m_exitState=zCMenu::NONE;return 0;
+    }
       if(IsCoopMenu(menu)&&action==SEL_ACTION_EXECCOMMANDS&&_stricmp(command.ToChar(),"ZWEIKLANG_START")==0){
           using namespace orebound::engine;
           if(UnionMenuApply(menu)){Start(options.asHost);UnionMenuStatus(menu,notice);}

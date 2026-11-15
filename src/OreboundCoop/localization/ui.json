@@ -980,6 +980,171 @@
       "id": "script.cavalorn.letter",
       "en": "Co-op: Cavalorn mentioned Vatras in Khorinis. This follow-up quest is not yet a shared test case.",
       "de": "Co-op: Cavalorn hat uns auf Vatras in Khorinis hingewiesen. Diese Folgequest ist noch kein gemeinsamer Testfall."
+    },
+    {
+      "id": "party.control_error",
+      "en": "Co-op request failed. Check the diagnostic log.",
+      "de": "Koop-Anfrage fehlgeschlagen. Bitte Diagnoseprotokoll pruefen."
+    },
+    {
+      "id": "party.control_busy",
+      "en": "Finish pending actions before sending a co-op request.",
+      "de": "Bitte offene Aktionen vor der Koop-Anfrage abschliessen."
+    },
+    {
+      "id": "party.need_saves",
+      "en": "Both players: save manually, then link the existing saves here.",
+      "de": "Beide Spieler: manuell speichern und dann hier die vorhandenen Staende verknuepfen."
+    },
+    {
+      "id": "party.need_alive",
+      "en": "Both players must be conscious and alive to link saves.",
+      "de": "Zum Verknuepfen muessen beide Spieler leben und bei Bewusstsein sein."
+    },
+    {
+      "id": "party.need_connection",
+      "en": "Load your game and connect before using session requests.",
+      "de": "Erst Spielstand laden und verbinden, dann Sitzungsanfragen verwenden."
+    },
+    {
+      "id": "party.checkpoint_ready",
+      "en": "Shared return point is available. Reloading requires both players to agree.",
+      "de": "Gemeinsamer Ruecksetzpunkt vorhanden. Zum Laden muessen beide zustimmen."
+    },
+    {
+      "id": "party.checkpoint_invalid",
+      "en": "The saved return point no longer matches. Link matching saves again.",
+      "de": "Ruecksetzpunkt passt nicht mehr. Bitte passende Staende erneut verknuepfen."
+    },
+    {
+      "id": "party.wait_consent",
+      "en": "Request sent. Your partner can accept in Co-op Session.",
+      "de": "Anfrage gesendet. Der Partner kann unter Koop-Sitzung zustimmen."
+    },
+    {
+      "id": "party.no_request",
+      "en": "There is no request awaiting your decision.",
+      "de": "Es gibt keine offene Anfrage zur Bestaetigung."
+    },
+    {
+      "id": "party.declined",
+      "en": "Request declined. Your current game is unchanged.",
+      "de": "Anfrage abgelehnt. Ihr aktueller Spielverlauf bleibt erhalten."
+    },
+    {
+      "id": "party.expired",
+      "en": "Request expired. You can send a new request.",
+      "de": "Anfrage abgelaufen. Ihr koennt eine neue Anfrage senden."
+    },
+    {
+      "id": "party.checkpoint_offer",
+      "en": "Your partner wants to link your existing saves. Accept or decline below.",
+      "de": "Der Partner moechte eure vorhandenen Staende verknuepfen. Unten zustimmen oder ablehnen."
+    },
+    {
+      "id": "party.resume_offer",
+      "en": "Your partner wants to reload the shared return point. Both games will return to their linked saves.",
+      "de": "Der Partner moechte den gemeinsamen Ruecksetzpunkt laden. Beide Spiele kehren zu den verknuepften Staenden zurueck."
+    },
+    {
+      "id": "party.resume_prepare",
+      "en": "Both players agreed. Checking the shared return point.",
+      "de": "Beide haben zugestimmt. Der gemeinsame Ruecksetzpunkt wird geprueft."
+    },
+    {
+      "id": "party.loading_common",
+      "en": "Loading the agreed shared return point.",
+      "de": "Der gemeinsam bestaetigte Ruecksetzpunkt wird geladen."
+    },
+    {
+      "id": "party.resume_done",
+      "en": "Shared return point loaded. Co-op connection restored.",
+      "de": "Gemeinsamer Ruecksetzpunkt geladen. Koop-Verbindung wiederhergestellt."
+    },
+    {
+      "id": "party.defeat_notice",
+      "en": "A player has died. You can request the shared return point under Co-op Session.",
+      "de": "Ein Spieler ist gestorben. Unter Koop-Sitzung koennt ihr den gemeinsamen Ruecksetzpunkt anfordern."
+    },
+    {
+      "id": "party.menu_entry",
+      "en": "Orebound Co-op - Session",
+      "de": "Orebound Co-op - Sitzung"
+    },
+    {
+      "id": "party.menu_title",
+      "en": "CO-OP SESSION",
+      "de": "KOOP-SITZUNG"
+    },
+    {
+      "id": "party.menu_checkpoint",
+      "en": "Link existing saves",
+      "de": "Vorhandene Staende verknuepfen"
+    },
+    {
+      "id": "party.menu_resume",
+      "en": "Load shared return point",
+      "de": "Gemeinsamen Ruecksetzpunkt laden"
+    },
+    {
+      "id": "party.menu_accept",
+      "en": "Accept request",
+      "de": "Anfrage annehmen"
+    },
+    {
+      "id": "party.menu_decline",
+      "en": "Decline request",
+      "de": "Anfrage ablehnen"
+    },
+    {
+      "id": "party.menu_back",
+      "en": "Back",
+      "de": "Zurueck"
+    },
+    {
+      "id": "party.quest_wait",
+      "en": "Waiting for the host to confirm this quest decision.",
+      "de": "Warte auf die Bestaetigung dieser Questentscheidung durch den Host."
+    },
+    {
+      "id": "party.quest_decided",
+      "en": "This quest decision was already confirmed or cannot be applied now.",
+      "de": "Diese Questentscheidung ist bereits bestaetigt oder gerade nicht moeglich."
+    },
+    {
+      "id": "party.quest_confirmed",
+      "en": "Shared quest decision confirmed.",
+      "de": "Gemeinsame Questentscheidung bestaetigt."
+    },
+    {
+      "id": "party.quest_timeout",
+      "en": "Quest confirmation timed out. Check the connection before trying again.",
+      "de": "Questbestaetigung abgelaufen. Vor einem neuen Versuch die Verbindung pruefen."
+    },
+    {
+      "id": "party.pair_slots",
+      "en": "Host / client slots: ",
+      "de": "Host / Client Speicherplaetze: "
+    },
+    {
+      "id": "party.local_slot",
+      "en": "Local save slot: ",
+      "de": "Eigener Speicherplatz: "
+    },
+    {
+      "id": "party.entry_help",
+      "en": "Agree on a shared return point or reload it together.",
+      "de": "Gemeinsamen Ruecksetzpunkt vereinbaren oder gemeinsam laden."
+    },
+    {
+      "id": "party.checkpoint_help",
+      "en": "Uses your existing saves; does not write a new game save.",
+      "de": "Verknuepft vorhandene Spielstaende und schreibt keinen neuen Spielstand."
+    },
+    {
+      "id": "party.resume_help",
+      "en": "Both players must agree. Both return to the paired saves.",
+      "de": "Beide muessen bestaetigen und kehren zu ihren verknuepften Spielstaenden zurueck."
     }
   ],
   "menu": [
@@ -1187,6 +1352,56 @@
       "symbol": "MENUITEM_ZK_BACK",
       "index": 0,
       "id": "menu.back"
+    },
+    {
+      "symbol": "MENUITEM_UNION_AUTO_OREBOUNDSESSION",
+      "index": 0,
+      "id": "party.menu_entry"
+    },
+    {
+      "symbol": "MENUITEM_ORB_SESSION_TITLE",
+      "index": 0,
+      "id": "party.menu_title"
+    },
+    {
+      "symbol": "MENUITEM_ORB_CHECKPOINT",
+      "index": 0,
+      "id": "party.menu_checkpoint"
+    },
+    {
+      "symbol": "MENUITEM_ORB_RESUME",
+      "index": 0,
+      "id": "party.menu_resume"
+    },
+    {
+      "symbol": "MENUITEM_ORB_ACCEPT",
+      "index": 0,
+      "id": "party.menu_accept"
+    },
+    {
+      "symbol": "MENUITEM_ORB_DECLINE",
+      "index": 0,
+      "id": "party.menu_decline"
+    },
+    {
+      "symbol": "MENUITEM_ORB_SESSION_BACK",
+      "index": 0,
+      "id": "party.menu_back"
+    },
+    {
+      "symbol": "MENUITEM_UNION_AUTO_OREBOUNDSESSION",
+      "index": 1,
+      "id": "party.entry_help"
+    },
+    {
+      "symbol": "MENUITEM_ORB_CHECKPOINT",
+      "index": 1,
+      "id": "party.checkpoint_help"
+    },
+    {
+      "symbol": "MENUITEM_ORB_RESUME",
+      "index": 1,
+      "id": "party.resume_help"
     }
   ],
   "script": [

@@ -4,7 +4,7 @@
 
 Updates preserve existing character profiles, saves and inventory journals.
 
-**Current development build: 0.1.0-alpha.39 · protocol 12 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
+**Current development build: 0.1.0-alpha.40 · protocol 13 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
 
 [Install](INSTALLATION.md) · [Build](BUILDING.md) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Languages](docs/LOCALIZATION.md) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
@@ -22,7 +22,7 @@ Each player runs a separate licensed Gothic II installation. One plugin supports
 
 Optional own start-menu artwork uses the existing native full-screen background, with the inner menu background transparent and the original Gothic II logos retained. It requires the matching separately supplied own artwork archive. See [menu artwork](docs/MENU-ARTWORK.md). The host menu visuals and startup transition have been confirmed; client display and shared gameplay acceptance remain separate.
 
-Technical implementation is distinguished from gameplay acceptance. The latest tower test confirmed connection, movement, stairs/distance and sprint, but exposed a duplicated chest item. Alpha.37 intercepts the previously unguarded native ACTION handlers and adds transfer-path diagnostics. A cleared Sprint key no longer causes repeated decoder warnings. Optional female everyday clothing reuses an existing atlas through a private native body copy. Female clothing appearance has been accepted by the user. One-item conservation and deposits/corpses still require native retesting. See [Alpha.37](docs/ALPHA-37.md).
+Technical implementation and native acceptance are tracked separately. Female everyday clothing and ordinary chest withdrawal have been confirmed by the user. Repeated guest dialogue, key-chest cancellation, simple gates and the new party paths still require native acceptance. Alpha.40 adds full same-world victory XP, durable first Cavalorn decisions with guest requests, mission/key permissions and consent-based loading of an existing save pair. It does not establish complete campaign quest support. See [Alpha.40](docs/ALPHA-40.md).
 
 ## Requirements and optional modules
 
@@ -34,7 +34,7 @@ The UI language is a local option and does not alter the network fingerprint. Tr
 
 ## Scope and limits
 
-This is a separate-view, two-PC project. General shared quests, unrestricted client quest turn-in, complete combat XP sharing, coordinated world/chapter transitions and one-click campaign save/load are unfinished. Different worlds, Internet/NAT operation and dedicated servers are not released features.
+This is a separate-view, two-PC project. Campaign-wide quest/faction adapters, unrestricted client quest turn-in, coordinated world/chapter transitions and automatic paired save writes remain unfinished. The bounded Cavalorn adapter, full same-world victory XP and agreed loading of an existing save pair are implemented but need native acceptance. Different worlds, Internet/NAT operation and dedicated servers are not released features.
 
 Direct player trading, additional appearances, starter armor, pings and map notes are planned for beta. Polish/Russian plugin translations, co-op achievements, selected duo NPC reactions and a travel journal are planned for the full version. Odyssee and Gothic 1 are separate later projects.
 
@@ -44,4 +44,6 @@ Own code is AGPL-3.0-only; see [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PAR
 
 [Alpha.38: native menu settings](docs/ALPHA-38.md). Up/Down selects a settings row; Left/Right changes the value; Save settings persists it.
 
-[Alpha.39: native interaction recovery and shared gates](docs/ALPHA-39.md). Both peers must update to protocol 12. Native key-chest, repeated dialogue and gate acceptance remain pending.
+[Alpha.39: native interaction recovery and shared gates](docs/ALPHA-39.md). These interaction changes remain included in the current build. Native key-chest, repeated dialogue and gate acceptance remain pending.
+
+[Alpha.40: party rules and agreed resume](docs/ALPHA-40.md). Protocol 13; update both peers. Native gameplay acceptance remains pending.

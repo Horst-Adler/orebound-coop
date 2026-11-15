@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-alpha.40
+
+- Share the full first native same-world victory XP; preserve unconscious/dead state.
+- Evaluate shared reward eligibility by current faction path; keep the active native quest scope bounded to Cavalorn.
+- Journal the first mutating Cavalorn choice, validate guest requests, match native reward deltas and notify the partner.
+- Add complete mission/key permission pages, shared key opening and durable owner-only unique consumption inside verified quest contexts.
+- Add explicit agreement on existing native save pairs and coordinated load/reconnect on fresh recovery timelines; no automatic saves or revival.
+- Validate complete native/sidecar fingerprints, durable consent/restart records and committed-plan retry after one peer has already loaded.
+- Protocol 13; both peers must update. Rollback requires matching backed-up state because new action semantics extend journal format 4.
+- Preserve accepted clothing, artwork, renderer and comfort modules. Native acceptance remains pending.
+
 ## 0.1.0-alpha.39
 
 - Capture direct native key unlock and wait for durable host confirmation before opening client inventory.

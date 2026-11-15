@@ -27,11 +27,14 @@ struct QuestReplayScope {bool previous=questReplaying;QuestReplayScope(){questRe
 struct QuestXpScope {int previous=QuestInt("ZK_COOP_QUEST_XP");explicit QuestXpScope(int amount){QuestSetInt("ZK_COOP_QUEST_XP",amount);}~QuestXpScope(){QuestSetInt("ZK_COOP_QUEST_XP",previous);}};
 oCInfo* QuestInfo(const char* name){if(!parser||!ogame||!ogame->infoman)return nullptr;const int id=parser->GetIndex(zSTRING(name));return id<0?nullptr:ogame->infoman->GetInformation(id);}
 int QuestInfoIndex(oCInfo* info){if(!info)return -1;for(int i=0;i<11;++i)if(_stricmp(info->name.ToChar(),cavalornInfos[i])==0)return i;return -1;}
-bool QuestSupported(){
-    if(!parser||!player||!ogame||CurrentWorld()!="NEWWORLD.ZEN")return false;
+bool QuestScriptProfileMatch(){
     static bool checked=false,profileMatches=false;
     if(!checked){checked=true;try{const auto bytes=rc::ReadFile(systemDirectory+"\\..\\_work\\Data\\Scripts\\_compiled\\GOTHIC.DAT");std::uint64_t hash=14695981039346656037ull;for(auto b:bytes){hash^=b;hash*=1099511628211ull;}profileMatches=hash==cv::SupportedScriptFingerprint;}catch(const std::exception&){profileMatches=false;}LootLog("quest_profile",profileMatches?"Verified installed Gothic2 script profile":"Unsupported script profile; Cavalorn adapter disabled");}
-    if(!profileMatches||parser->GetIndex(zSTRING("DIA_ADDON_CAVALORN_HELFEN"))!=13386)return false;
+    return profileMatches;
+}
+bool QuestSupported(){
+    if(!parser||!player||!ogame||CurrentWorld()!="NEWWORLD.ZEN")return false;
+    if(!QuestScriptProfileMatch()||parser->GetIndex(zSTRING("DIA_ADDON_CAVALORN_HELFEN"))!=13386)return false;
     if(questCheckedParser==parser&&questCheckedInfoManager==ogame->infoman)return true;
     for(const auto* name:{"MIS_ADDON_CAVALORN_KILLBRAGO","MIS_ADDON_CAVALORN_LETTER2VATRAS","BDT_1013_AWAY","ZK_COOP_QUEST_XP"}){auto* s=parser->GetSymbol(zSTRING(name));if(!s||s->type!=2)return false;}
     for(const auto* name:{"ZK_COOP_APPLY_QUEST_XP","ZK_COOP_CAVALORN_LOG","ZK_COOP_CAVALORN_WAIT"}){auto* s=parser->GetSymbol(zSTRING(name));if(!s||s->type!=5||s->ele!=0)return false;}
@@ -46,19 +49,20 @@ void QuestCall(const char* name){
     QuestBindings bindings;
     parser->SetInstance(zSTRING("HERO"),player);if(std::string(name)=="ZK_COOP_APPLY_QUEST_XP")ExtensionCall(extensions::Command::QuestXp,QuestInt("ZK_COOP_QUEST_XP"));else parser->CallFunc(index);
 }
-unsigned QuestInventory(unsigned instance){
-    if(!player)return 0;QuestBindings bindings;player->inventory2.UnpackAllItems();LootSource source;source.vob=source.corpse=player;std::uint64_t amount=0;
+unsigned QuestActorInventory(oCNpc* actor,unsigned instance){
+    if(!actor)return 0;QuestBindings bindings;actor->inventory2.UnpackAllItems();LootSource source;source.vob=source.corpse=actor;std::uint64_t amount=0;
     for(auto* item:LootNativeItems(source))if(static_cast<unsigned>(item->GetInstance())==instance)amount+=item->amount;
     return static_cast<unsigned>((std::min)(amount,std::uint64_t(UINT32_MAX)));
 }
+unsigned QuestInventory(unsigned instance){return QuestActorInventory(player,instance);}
 void QuestFail(const std::string& reason){if(questError!=reason)LootLog("quest_blocked",reason);questError=reason;notice=Ui("ui_f02982da1dfb")+reason;}
 void QuestRestoreConditions(){cv::RestoreConditions(questOriginalConditions);}
 void QuestSessionReset(){QuestRestoreConditions();havePeerReadiness=false;peerReadiness=session::Ready{};questReceivedRevision=questRevision=0;questLastState=questLastSample=0;questStateKey.clear();questLastReward.clear();questReceipts.clear();}
 const rc::Record* QuestEvent(unsigned event){
-    for(const auto& pair:recoveryStore.Records()){const auto& r=pair.second;if(r.role==rc::Role::Host&&r.tx.source.kind==lo::Source::Quest&&r.tx.hostTimeline==recoveryTimeline&&r.tx.instance==static_cast<int>(event))return &r;}
+    for(const auto& pair:recoveryStore.Records()){const auto& r=pair.second;if(r.role==rc::Role::Host&&cv::Allowed(r.tx,cavalornRewards)&&r.tx.hostTimeline==recoveryTimeline&&r.tx.instance==static_cast<int>(event))return &r;}
     return nullptr;
 }
-unsigned QuestPendingAwards(){unsigned count=0;if(!HostCombat()||!havePeerReadiness)return 0;for(const auto& pair:recoveryStore.Records()){const auto& r=pair.second;if(r.role==rc::Role::Host&&r.tx.source.kind==lo::Source::Quest&&r.tx.hostTimeline==recoveryTimeline&&r.tx.ownerTimeline==peerReadiness.timeline&&!questReceipts.count(r.tx.id))++count;}return count;}
+unsigned QuestPendingAwards(){unsigned count=0;if(!HostCombat()||!havePeerReadiness)return 0;for(const auto& pair:recoveryStore.Records()){const auto& r=pair.second;if(r.role==rc::Role::Host&&cv::Allowed(r.tx,cavalornRewards)&&r.tx.hostTimeline==recoveryTimeline&&r.tx.ownerTimeline==peerReadiness.timeline&&!questReceipts.count(r.tx.id))++count;}return count;}
 bool QuestRecoveryEffect(const rc::Record& record,bool desired,bool& handled){
     handled=record.tx.source.kind==lo::Source::Quest;if(!handled)return false;
     if(!desired||!QuestSupported()||!cv::Allowed(record.tx,cavalornRewards))return false;
@@ -77,7 +81,7 @@ bool QuestRecoveryEffect(const rc::Record& record,bool desired,bool& handled){
 }
 bool QuestPartyReady(){
     const unsigned required=session::Checkpoint|session::Rules|session::Actor|session::Quest;
-    return CombatConnected()&&HostCombat()&&QuestSupported()&&questError.empty()&&recoveryReady&&recoveryError.empty()&&!recoveryBlocked&&!lootLedger.HasUnapplied()&&cv::EligibleForCredit(player->attribute[0],player->IsUnconscious()!=FALSE)&&rulesReady&&remote&&haveTarget&&timing::Elapsed(Now(),lastSnapshotAt)<=2000&&havePeerReadiness&&(peerReadiness.flags&required)==required&&!(peerReadiness.flags&(session::Blocked|session::Pending|session::Incapacitated))&&!peerReadiness.timeline.empty();
+    return CombatConnected()&&QuestSupported()&&questError.empty()&&recoveryReady&&recoveryError.empty()&&!recoveryBlocked&&!lootLedger.HasUnapplied()&&cv::EligibleForCredit(player->attribute[0],player->IsUnconscious()!=FALSE)&&rulesReady&&remote&&haveTarget&&timing::Elapsed(Now(),lastSnapshotAt)<=2000&&havePeerReadiness&&(peerReadiness.flags&required)==required&&!(peerReadiness.flags&(session::Blocked|session::Pending|session::Incapacitated))&&!peerReadiness.timeline.empty();
 }
 void QuestUpdateConditions(){
     if(!QuestSupported()){QuestRestoreConditions();return;}
@@ -89,7 +93,7 @@ void QuestUpdateConditions(){
 }
 bool QuestAllowInfo(oCInfo* info){
     const int which=QuestInfoIndex(info);if(which<0||questReplaying||(!CombatConnected()&&!questSessionBound))return true;
-    if(!CombatConnected()||!HostCombat()){notice=Ui("ui_37398218e189");return false;}
+    if(!CombatConnected()){notice=Ui("ui_37398218e189");return false;}
     if(!QuestPartyReady()){
         notice=Ui("ui_06d05082ebea");return false;
     }
@@ -97,21 +101,25 @@ bool QuestAllowInfo(oCInfo* info){
     if(which==5&&(QuestEvent(3)||QuestEvent(4)))return false;
     return true;
 }
-struct QuestBefore {int which=-1;unsigned xp=0,gold=0,knife=0,potion=0;std::string host,owner;};
+struct QuestBefore {int which=-1;unsigned xp=0,gold=0,knife=0,potion=0;std::string host,owner;oCNpc* actor=nullptr;};
 QuestBefore QuestBeforeInfo(oCInfo* info){
     QuestBefore before;before.which=QuestInfoIndex(info);
     if(before.which<0||!CombatConnected()||!HostCombat()||!QuestSupported()){before.which=-1;return before;}
-    before.host=recoveryTimeline;before.owner=peerReadiness.timeline;before.xp=player->experience_points;
-    before.gold=QuestInventory(cavalornRewards.goldItem);before.knife=QuestInventory(cavalornRewards.knifeItem);before.potion=QuestInventory(cavalornRewards.potionItem);return before;
+    before.actor=PartyQuestActor();before.host=recoveryTimeline;before.owner=peerReadiness.timeline;before.xp=before.actor->experience_points;
+    before.gold=QuestActorInventory(before.actor,cavalornRewards.goldItem);before.knife=QuestActorInventory(before.actor,cavalornRewards.knifeItem);before.potion=QuestActorInventory(before.actor,cavalornRewards.potionItem);return before;
 }
 void QuestRecordNative(const QuestBefore& before,unsigned event,unsigned item,unsigned amount){
-    if(!amount)return;if(QuestEvent(event))throw std::runtime_error("Repeated native quest reward event");
+    if(!amount)return;
+    if(!party::ShareFactionQuest(party::Faction::Any,before.actor?before.actor->guild:0,before.actor==player?peerCombat.stats.guild:player->guild))throw std::runtime_error("Quest faction reward eligibility changed");
+    if(QuestEvent(event))throw std::runtime_error("Repeated native quest reward event");
     rc::Tx tx;tx.id=rc::NewGuid();tx.hostTimeline=before.host;tx.ownerTimeline=before.owner;tx.world=CurrentWorld();tx.source.kind=lo::Source::Quest;tx.source.name="CAVALORN_KILLBRAGO";tx.instance=event;
     tx.action=event==1?rc::Action::QuestXp:rc::Action::QuestItem;tx.item=item;tx.amount=amount;tx.decision=rc::Decision::Commit;
     if(!cv::Allowed(tx,cavalornRewards)||!recoveryStore.Put(tx,rc::Role::Host))throw std::runtime_error("Native Cavalorn reward did not match verified adapter");
     // Native host script just applied this effect, on the same game thread and
     // before another native save can run. Do not grant it to the host again.
-    recoveryEffects.insert(tx.id);questSessionBound=true;
+    if(before.actor==player)recoveryEffects.insert(tx.id);
+    else if(!RecoveryReconcile(*recoveryStore.Find(tx.id)))throw std::runtime_error("Host party reward deferred after guest decision");
+    questSessionBound=true;
     LootLog("quest_reward_committed","tx="+tx.id+" event="+std::to_string(event)+" amount="+std::to_string(amount));
 }
 void QuestAfterInfo(const QuestBefore& before){
@@ -119,12 +127,12 @@ void QuestAfterInfo(const QuestBefore& before){
     try{
         if(before.host!=recoveryTimeline)throw std::runtime_error("Quest lineage changed during native dialogue");
         if(before.which==5){
-            const auto knife=QuestInventory(cavalornRewards.knifeItem),potion=QuestInventory(cavalornRewards.potionItem);
+            const auto knife=QuestActorInventory(before.actor,cavalornRewards.knifeItem),potion=QuestActorInventory(before.actor,cavalornRewards.potionItem);
             if(knife<before.knife||potion<before.potion)throw std::runtime_error("Native support gift inventory unexpectedly decreased");
             QuestRecordNative(before,3,cavalornRewards.knifeItem,knife-before.knife);QuestRecordNative(before,4,cavalornRewards.potionItem,potion-before.potion);
         }
         if(before.which==7||before.which==8){
-            const auto xp=player->experience_points;const auto gold=QuestInventory(cavalornRewards.goldItem);
+            const auto xp=before.actor->experience_points;const auto gold=QuestActorInventory(before.actor,cavalornRewards.goldItem);
             if(xp<before.xp||xp-before.xp!=cavalornRewards.xp||gold<before.gold||QuestInt("MIS_ADDON_CAVALORN_KILLBRAGO")!=2)throw std::runtime_error("Native quest completion incomplete");
             QuestRecordNative(before,1,0,xp-before.xp);QuestRecordNative(before,2,cavalornRewards.goldItem,gold-before.gold);
         }
@@ -176,7 +184,7 @@ void QuestFrame(unsigned long long now){
     if(!(peerReadiness.flags&session::Quest)||(peerReadiness.flags&session::Blocked))return;
     unsigned sent=0;for(const auto& pair:recoveryStore.Records()){
         const auto& record=pair.second;const auto& tx=record.tx;
-        if(record.role!=rc::Role::Host||tx.source.kind!=lo::Source::Quest||tx.hostTimeline!=recoveryTimeline||tx.ownerTimeline!=peerReadiness.timeline||questReceipts.count(tx.id)||timing::Elapsed(now,questLastReward[tx.id])<2000)continue;
+        if(record.role!=rc::Role::Host||!cv::Allowed(tx,cavalornRewards)||tx.hostTimeline!=recoveryTimeline||tx.ownerTimeline!=peerReadiness.timeline||questReceipts.count(tx.id)||timing::Elapsed(now,questLastReward[tx.id])<2000)continue;
         if(!recoveryEffects.count(tx.id))continue;
         rc::Message m;m.op=rc::Op::Result;m.tx=tx;m.request=NextLootRequest();QueueRecovery(m);questLastReward[tx.id]=now;if(++sent>=4)break;
     }

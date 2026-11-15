@@ -21,7 +21,7 @@ inline int ResolveNpcSource(const std::string& name,const std::array<float,3>& p
     if(names==1)return named;
     return best>=0&&std::sqrt(second)-std::sqrt(closest)>=100?best:-1;
 }
-enum class Action:std::uint32_t {Take=1,Put=2,Unlock=3,GroundTake=4,Drop=5,Buy=6,Sell=7,QuestXp=8,QuestItem=9};
+enum class Action:std::uint32_t {Take=1,Put=2,Unlock=3,GroundTake=4,Drop=5,Buy=6,Sell=7,QuestXp=8,QuestItem=9,CombatXp=10,UniqueConsume=11};
 enum class Decision:std::uint32_t {Prepared,Commit,Abort};
 enum class Role:std::uint32_t {Host=1,Owner=2,Local=3};
 enum class Op:std::uint8_t {Hello=32,Request,Result,Query,LockState,Receipt};
@@ -37,6 +37,16 @@ inline bool Valid(const Tx& t){
     if(!Guid(t.id)||!Guid(t.hostTimeline)||!Guid(t.ownerTimeline)||t.world.empty()||t.world.size()>63||t.source.name.size()>63||t.decision>Decision::Abort)return false;
     if(t.source.kind!=loot::Source::Chest&&t.source.kind!=loot::Source::Corpse&&t.source.kind!=loot::Source::Ground&&t.source.kind!=loot::Source::Merchant&&t.source.kind!=loot::Source::Quest)return false;
     for(float p:t.source.position)if(!std::isfinite(p)||std::abs(p)>1000000)return false;
+    if(t.source.kind==loot::Source::Quest&&t.action==Action::UniqueConsume){
+        if(t.source.name.size()!=24||t.source.name.rfind("ORB_USE_",0)!=0)return false;
+        for(std::size_t i=8;i<t.source.name.size();++i)if(!((t.source.name[i]>='0'&&t.source.name[i]<='9')||(t.source.name[i]>='a'&&t.source.name[i]<='f')))return false;
+        return t.instance>0&&t.instance<1000000&&t.item==static_cast<unsigned>(t.instance)&&t.amount>0&&t.amount<=1000000&&!t.currency&&!t.price;
+    }
+    if(t.source.kind==loot::Source::Quest&&t.action==Action::CombatXp){
+        if(t.source.name.size()!=23||t.source.name.rfind("ORB_XP_",0)!=0)return false;
+        for(std::size_t i=7;i<t.source.name.size();++i){const auto c=t.source.name[i];if(!((c>='0'&&c<='9')||(c>='a'&&c<='f')))return false;}
+        return t.instance>0&&t.instance<1000000&&t.item==0&&t.amount>0&&t.amount<=1000000&&!t.currency&&!t.price;
+    }
     if(t.source.kind==loot::Source::Quest)return t.source.name=="CAVALORN_KILLBRAGO"&&t.instance>=1&&t.instance<=4&&t.currency==0&&t.price==0&&t.amount>0&&t.amount<=1000000&&((t.action==Action::QuestXp&&t.item==0&&t.instance==1)||(t.action==Action::QuestItem&&t.item>0&&t.item<1000000&&t.instance>=2));
     if((t.source.kind==loot::Source::Corpse||t.source.kind==loot::Source::Merchant)&&(t.instance<=0||t.instance>=1000000))return false;
     if(t.action==Action::Buy||t.action==Action::Sell)return t.source.kind==loot::Source::Merchant&&t.item>0&&t.item<1000000&&t.amount>0&&t.amount<=1000000&&t.currency>0&&t.currency<1000000&&t.item!=t.currency&&t.price<=1000000;

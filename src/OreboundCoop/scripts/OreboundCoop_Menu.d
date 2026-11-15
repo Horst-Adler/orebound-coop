@@ -285,3 +285,38 @@ instance MENUITEM_ZK_BACK(C_MENU_ITEM_DEF)
     text[0] = "Back";
     onselaction[0] = SEL_ACTION_BACK;
 };
+
+instance MenuItem_Union_Auto_OreboundSession(C_MENU_ITEM_UNION_DEF)
+{
+    text[0] = "Orebound Co-op - Session";
+    text[1] = "Agree on a shared return point or reload it together.";
+    onselaction[0] = SEL_ACTION_STARTMENU;
+    onselaction_s[0] = "MENU_OREBOUND_SESSION";
+};
+instance MENU_OREBOUND_SESSION(C_MENU_DEF)
+{
+    backpic = MENU_BACK_PIC;
+    items[0] = "MENUITEM_ORB_SESSION_TITLE";
+    items[1] = "MENUITEM_ORB_SESSION_STATUS";
+    items[2] = "MENUITEM_ORB_CHECKPOINT";
+    items[3] = "MENUITEM_ORB_RESUME";
+    items[4] = "MENUITEM_ORB_ACCEPT";
+    items[5] = "MENUITEM_ORB_DECLINE";
+    items[6] = "MENUITEM_ORB_SESSION_BACK";
+    defaultoutgame = 2; defaultingame = 2;
+    flags = flags | MENU_SHOW_INFO;
+};
+instance MENUITEM_ORB_SESSION_TITLE(C_MENU_ITEM_DEF)
+{ text[0] = "CO-OP SESSION"; type = MENU_ITEM_TEXT; posx = 0; posy = 700; dimx = 8100; flags = (flags & ~IT_SELECTABLE) | IT_TXT_CENTER; };
+instance MENUITEM_ORB_SESSION_STATUS(C_MENU_ITEM_DEF)
+{ text[0] = "Save on both PCs, then agree on a shared return point."; posx = 400; posy = 1500; dimx = 7400; dimy = 1000; fontname = MENU_FONT_SMALL; flags = (flags & ~IT_SELECTABLE) | IT_MULTILINE; };
+instance MENUITEM_ORB_CHECKPOINT(C_MENU_ITEM_DEF)
+{ text[0] = "Link existing saves"; text[1] = "Uses your existing saves; does not write a new game save."; posx = 0; posy = 3000; dimx = 8100; flags = flags | IT_TXT_CENTER; onselaction[0] = SEL_ACTION_EXECCOMMANDS; onselaction_s[0] = "OREBOUND_CHECKPOINT"; };
+instance MENUITEM_ORB_RESUME(C_MENU_ITEM_DEF)
+{ text[0] = "Load shared return point"; text[1] = "Both players must agree. Both return to the paired saves."; posx = 0; posy = 3600; dimx = 8100; flags = flags | IT_TXT_CENTER; onselaction[0] = SEL_ACTION_EXECCOMMANDS; onselaction_s[0] = "OREBOUND_RESUME"; };
+instance MENUITEM_ORB_ACCEPT(C_MENU_ITEM_DEF)
+{ text[0] = "Accept request"; posx = 0; posy = 4500; dimx = 8100; flags = flags | IT_TXT_CENTER; onselaction[0] = SEL_ACTION_EXECCOMMANDS; onselaction_s[0] = "OREBOUND_ACCEPT"; };
+instance MENUITEM_ORB_DECLINE(C_MENU_ITEM_DEF)
+{ text[0] = "Decline request"; posx = 0; posy = 5100; dimx = 8100; flags = flags | IT_TXT_CENTER; onselaction[0] = SEL_ACTION_EXECCOMMANDS; onselaction_s[0] = "OREBOUND_DECLINE"; };
+instance MENUITEM_ORB_SESSION_BACK(C_MENU_ITEM_DEF)
+{ text[0] = "Back"; posx = 0; posy = 6800; dimx = 8100; flags = flags | IT_TXT_CENTER; onselaction[0] = SEL_ACTION_BACK; };

@@ -118,6 +118,7 @@ bool RecoveryRemove(const LootSource& source,unsigned instance,unsigned amount){
 lo::Identity RecoveryIdentity(const LootSource& source);
 bool RecoveryApply(const rc::Record& record,bool desired){
     const auto& tx=record.tx;
+    bool partyHandled=false;const auto partyResult=PartyRecoveryEffect(record,desired,partyHandled);if(partyHandled)return partyResult;
     bool questHandled=false;const auto questResult=QuestRecoveryEffect(record,desired,questHandled);if(questHandled)return questResult;
     bool worldHandled=false;const auto worldResult=WorldRecoveryEffect(record,desired,worldHandled);if(worldHandled)return worldResult;
     LootSource source;
@@ -142,6 +143,7 @@ std::string RecoveryBlockReason(){
     return {};
 }
 bool RecoveryCanLoot(){
+    if(PartyQuestBusy()||PartyUniquePending()){notice=Ui("party.quest_wait");return false;}
     if(!CharacterReady()){notice=Ui("ui_263eaf75a6f4");return false;}
     if(saving||network.PeerSaving()){notice=Ui("ui_e0acf3b1a778");return false;}
     if(!recoveryError.empty()||recoveryBlocked){notice=Ui("ui_a5209833b627");return false;}
@@ -222,7 +224,7 @@ void RecoveryReceive(const std::vector<std::uint8_t>& bytes){
         }
         if(!recoveryError.empty()){LootLog("recovery_blocked",recoveryError);return;}
         if(!recoveryReady)throw std::runtime_error("No trusted save checkpoint for recovery");
-        if(m.tx.source.kind==lo::Source::Quest){QuestReceiveReward(m);return;}
+        if(m.tx.source.kind==lo::Source::Quest){if(party::PartyReward(m.tx))PartyReceiveReward(m);else QuestReceiveReward(m);return;}
         if(!HostCombat()){if(m.op!=rc::Op::Result||m.tx.hostTimeline!=recoveryPeerTimeline)throw std::runtime_error("Wrong recovery direction/lineage");RecoveryResult(m);return;}
         if(m.op==rc::Op::Receipt){lootLedger.Applied(m.request,m.lease);lootLastTraffic=Now();LootLog("recovery_receipt",m.tx.id);return;}
         if(m.op!=rc::Op::Request&&m.op!=rc::Op::Query)throw std::runtime_error("Wrong owner recovery message");
