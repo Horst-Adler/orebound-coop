@@ -152,7 +152,7 @@ inline constexpr Entry Catalogue[]={
  {u8"menu_menuitem_zk_title_0",u8"OREBOUND CO-OP",u8"OREBOUND CO-OP"},
  {u8"menu_menuitem_zk_gender_label_0",u8"Character / gender",u8"Geschlecht / Figur"},
  {u8"menu_menuitem_zk_gender_choice_0",u8"Male (Hero)|Female (Velaya)",u8"Maennlich (Held)|Weiblich (Velaya)"},
- {u8"menu_menuitem_zk_gender_choice_1",u8"Left/Right: choose a character and save. Native G2 body and face; outfit planned for beta.",u8"Links/Rechts: Figur waehlen und speichern. Native G2-Figur mit Velayas Kopf/Gesicht; Outfit erst Beta."},
+ {u8"menu_menuitem_zk_gender_choice_1",u8"Left/Right: choose a character and save. Native G2 body and face; everyday clothing confirmed.",u8"Links/Rechts: Figur waehlen und speichern. Nativer G2-Koerper und Kopf mit bestaetigter Alltagskleidung."},
  {u8"menu_menuitem_zk_name_label_0",u8"Player name",u8"Spielername"},
  {u8"menu_menuitem_zk_name_input_1",u8"Enter: edit name. Enter confirms; Escape cancels.",u8"Enter: Name bearbeiten. Enter bestaetigt, Escape verwirft die Eingabe."},
  {u8"menu_menuitem_zk_host_label_0",u8"Host IP (IPv4)",u8"Host-IP (IPv4)"},

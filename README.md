@@ -4,7 +4,7 @@
 
 Updates preserve existing character profiles, saves and inventory journals.
 
-**Current development build: 0.1.0-alpha.37 · protocol 11 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
+**Current development build: 0.1.0-alpha.38 · protocol 11 · Ninja script ABI 2.** This is a developer alpha. Native two-PC acceptance is still open; a completed co-op campaign is not claimed.
 
 [Install](INSTALLATION.md) · [Build](BUILDING.md) · [Roadmap](ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Languages](docs/LOCALIZATION.md) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
@@ -22,7 +22,7 @@ Each player runs a separate licensed Gothic II installation. One plugin supports
 
 Optional own start-menu artwork uses the existing native full-screen background, with the inner menu background transparent and the original Gothic II logos retained. It requires the matching separately supplied own artwork archive. See [menu artwork](docs/MENU-ARTWORK.md). The host menu visuals and startup transition have been confirmed; client display and shared gameplay acceptance remain separate.
 
-Technical implementation is distinguished from gameplay acceptance. The latest tower test confirmed connection, movement, stairs/distance and sprint, but exposed a duplicated chest item. Alpha.37 intercepts the previously unguarded native ACTION handlers and adds transfer-path diagnostics. A cleared Sprint key no longer causes repeated decoder warnings. Optional female everyday clothing reuses an existing atlas through a private native body copy. One-item conservation, deposits/corpses and actual clothing appearance still require native retesting. See [Alpha.37](docs/ALPHA-37.md).
+Technical implementation is distinguished from gameplay acceptance. The latest tower test confirmed connection, movement, stairs/distance and sprint, but exposed a duplicated chest item. Alpha.37 intercepts the previously unguarded native ACTION handlers and adds transfer-path diagnostics. A cleared Sprint key no longer causes repeated decoder warnings. Optional female everyday clothing reuses an existing atlas through a private native body copy. Female clothing appearance has been accepted by the user. One-item conservation and deposits/corpses still require native retesting. See [Alpha.37](docs/ALPHA-37.md).
 
 ## Requirements and optional modules
 
@@ -41,3 +41,5 @@ Direct player trading, additional appearances, starter armor, pings and map note
 ## Source and distribution
 
 Own code is AGPL-3.0-only; see [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md). This repository contains own source, build/install tools, documentation and synthetic test fixtures. It does not contain original game data, external SDK binaries, transformed third-party mods, private diagnostics or the productive work website. No public binary release is assumed.
+
+[Alpha.38: native menu settings](docs/ALPHA-38.md). Up/Down selects a settings row; Left/Right changes the value; Save settings persists it.

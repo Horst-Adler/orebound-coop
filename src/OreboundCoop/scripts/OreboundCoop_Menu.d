@@ -36,14 +36,15 @@ instance MENU_ZWEIKLANG_COOP(C_MENU_DEF)
     items[18] = "MENUITEM_ZK_LOG_CHOICE";
     items[19] = "MENUITEM_ZK_ENGINE_LABEL";
     items[20] = "MENUITEM_ZK_ENGINE_CHOICE";
-    items[21] = "MENUITEM_ZK_APPLY";
-    items[22] = "MENUITEM_ZK_START";
-    items[23] = "MENUITEM_ZK_LEAVE";
-    items[24] = "MENUITEM_ZK_STATUS";
-    items[25] = "MENUITEM_ZK_FF_LABEL";
-    items[26] = "MENUITEM_ZK_FF_CHOICE";
-    items[27] = "MENUITEM_ZK_LANGUAGE_LABEL";
-    items[28] = "MENUITEM_ZK_LANGUAGE_CHOICE";
+    // Native navigation follows item slots, not screen coordinates.
+    items[21] = "MENUITEM_ZK_FF_LABEL";
+    items[22] = "MENUITEM_ZK_FF_CHOICE";
+    items[23] = "MENUITEM_ZK_LANGUAGE_LABEL";
+    items[24] = "MENUITEM_ZK_LANGUAGE_CHOICE";
+    items[25] = "MENUITEM_ZK_APPLY";
+    items[26] = "MENUITEM_ZK_START";
+    items[27] = "MENUITEM_ZK_LEAVE";
+    items[28] = "MENUITEM_ZK_STATUS";
     items[100] = "MENUITEM_ZK_BACK";
     defaultoutgame = 2;
     defaultingame = 2;
@@ -75,6 +76,20 @@ prototype ZK_MENU_INPUT(C_MENU_ITEM)
     onselaction[0] = SEL_ACTION_UNDEF;
 };
 
+// Gothic's native choice row selects its label and forwards Left/Right
+// through IT_EFFECTS_NEXT to the immediately following choice item.
+prototype ZK_MENU_CHOICE_LABEL(C_MENU_ITEM)
+{
+    C_MENU_ITEM_DEF();
+    type = MENU_ITEM_TEXT;
+    posx = 400;
+    dimx = 3000;
+    dimy = 350;
+    fontname = MENU_FONT_SMALL;
+    flags = IT_SELECTABLE | IT_EFFECTS_NEXT;
+    onselaction[0] = SEL_ACTION_UNDEF;
+};
+
 prototype ZK_MENU_CHOICE(C_MENU_ITEM)
 {
     C_MENU_ITEM_DEF();
@@ -84,7 +99,7 @@ prototype ZK_MENU_CHOICE(C_MENU_ITEM)
     dimy = 350;
     fontname = MENU_FONT_SMALL;
     onchgsetoptionsection = "ZWEIKLANGCOOP_MENU";
-    flags = IT_SELECTABLE;
+    flags = flags & ~IT_SELECTABLE;
     onselaction[0] = SEL_ACTION_UNDEF;
 };
 
@@ -105,7 +120,7 @@ instance MENUITEM_ZK_CLIENT_EDIT(C_MENU_ITEM_DEF)
     onselaction[0] = SEL_ACTION_EXECCOMMANDS;
     onselaction_s[0] = "ZWEIKLANG_EDIT_CLIENT";
 };
-instance MENUITEM_ZK_ROLE_LABEL(ZK_MENU_LABEL)
+instance MENUITEM_ZK_ROLE_LABEL(ZK_MENU_CHOICE_LABEL)
 { text[0] = "Role of this PC"; posy = 2520; };
 instance MENUITEM_ZK_ROLE_CHOICE(ZK_MENU_CHOICE)
 {
@@ -141,13 +156,13 @@ instance MENUITEM_ZK_TITLE(C_MENU_ITEM_DEF)
     flags = (flags & ~IT_SELECTABLE) | IT_TXT_CENTER;
 };
 
-instance MENUITEM_ZK_GENDER_LABEL(ZK_MENU_LABEL)
+instance MENUITEM_ZK_GENDER_LABEL(ZK_MENU_CHOICE_LABEL)
 { text[0] = "Character / gender"; posy = 2900; };
 instance MENUITEM_ZK_GENDER_CHOICE(ZK_MENU_CHOICE)
 {
     posy = 2900;
     text[0] = "Male (Hero)|Female (Velaya)";
-    text[1] = "Left/Right: choose a character and save. Native G2 body and face; outfit planned for beta.";
+    text[1] = "Left/Right: choose a character and save. Native G2 body and face with everyday clothing.";
     onchgsetoption = "Gender";
 };
 
@@ -175,7 +190,7 @@ instance MENUITEM_ZK_PORT_INPUT(ZK_MENU_INPUT)
     onchgsetoption = "Port";
     text[1] = "Enter: port 1024 to 65535. Default: 12345.";
 };
-instance MENUITEM_ZK_LOG_LABEL(ZK_MENU_LABEL)
+instance MENUITEM_ZK_LOG_LABEL(ZK_MENU_CHOICE_LABEL)
 { text[0] = "Logging"; posy = 3280; };
 instance MENUITEM_ZK_LOG_CHOICE(ZK_MENU_CHOICE)
 {
@@ -184,7 +199,7 @@ instance MENUITEM_ZK_LOG_CHOICE(ZK_MENU_CHOICE)
     text[1] = "Left/Right: log level. Debug records packets and game state.";
     onchgsetoption = "LogLevel";
 };
-instance MENUITEM_ZK_ENGINE_LABEL(ZK_MENU_LABEL)
+instance MENUITEM_ZK_ENGINE_LABEL(ZK_MENU_CHOICE_LABEL)
 { text[0] = "Engine messages"; posy = 3660; };
 instance MENUITEM_ZK_ENGINE_CHOICE(ZK_MENU_CHOICE)
 {
@@ -245,7 +260,7 @@ instance MENUITEM_ZK_PORT_EDIT(C_MENU_ITEM_DEF)
 
 
 
-instance MENUITEM_ZK_FF_LABEL(ZK_MENU_LABEL)
+instance MENUITEM_ZK_FF_LABEL(ZK_MENU_CHOICE_LABEL)
 { text[0] = "Friendly fire"; posy = 4040; };
 instance MENUITEM_ZK_FF_CHOICE(ZK_MENU_CHOICE)
 {
@@ -255,7 +270,7 @@ instance MENUITEM_ZK_FF_CHOICE(ZK_MENU_CHOICE)
     onchgsetoption = "FriendlyFire";
 };
 
-instance MENUITEM_ZK_LANGUAGE_LABEL(ZK_MENU_LABEL) { text[0] = "Language / Sprache"; posy = 4420; };
+instance MENUITEM_ZK_LANGUAGE_LABEL(ZK_MENU_CHOICE_LABEL) { text[0] = "Language / Sprache"; posy = 4420; };
 instance MENUITEM_ZK_LANGUAGE_CHOICE(ZK_MENU_CHOICE)
 {
     posy = 4420;

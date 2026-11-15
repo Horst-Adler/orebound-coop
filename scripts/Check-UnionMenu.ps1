@@ -5,12 +5,14 @@ $root=Split-Path -Parent $PSScriptRoot
 $script=Get-Content -LiteralPath (Join-Path $root 'src\OreboundCoop\scripts\OreboundCoop_Menu.d') -Raw
 $known=@('C_MENU_ITEM','C_MENU_DEF','C_MENU_ITEM_DEF','C_MENU_ITEM_UNION_DEF')
 $instances=@{}
+$definitions=@{}
 foreach($m in [regex]::Matches($script,'(?is)\b(prototype|instance)\s+(\w+)\s*\((\w+)\)\s*\{(.*?)\};')) {
     $kind=$m.Groups[1].Value;$name=$m.Groups[2].Value;$parent=$m.Groups[3].Value;$body=$m.Groups[4].Value
     if($parent -notin $known){throw "Unknown or forward-declared base type: $name ($parent)"}
     if($kind -eq 'prototype' -and $parent -ne 'C_MENU_ITEM'){throw "Invalid prototype base: $name"}
     if($name -in $known){throw "Duplicate definition: $name"}
     $known+=$name
+    $definitions[$name]=@{Parent=$parent;Body=$body}
     if($kind -eq 'instance'){$instances[$name]=$body}
 }
 $menu=$instances['MENU_ZWEIKLANG_COOP']
@@ -35,5 +37,32 @@ foreach($field in @('NAME','HOST','CLIENT','PORT')) {
 foreach($key in @('Name','Host','Client','Port','Role','Gender','LogLevel','EngineMessages','FriendlyFire','Language')) {
     if($script -notmatch ('onchgsetoption\s*=\s*"'+$key+'"')){throw "Missing option binding: $key"}
 }
+$choiceLabels=$definitions['ZK_MENU_CHOICE_LABEL'].Body
+if($choiceLabels -notmatch 'flags\s*=\s*IT_SELECTABLE\s*\|\s*IT_EFFECTS_NEXT' -or
+   $choiceLabels -notmatch 'onselaction\[0\]\s*=\s*SEL_ACTION_UNDEF'){
+    throw 'Choice labels must be selectable and forward native input without closing the menu.'
+}
+if($definitions['ZK_MENU_CHOICE'].Body -notmatch 'flags\s*=\s*flags\s*&\s*~IT_SELECTABLE'){
+    throw 'Native choice values must not create a second navigation stop.'
+}
+$ordered=@($slots.Keys|ForEach-Object {[int]$_}|Sort-Object|ForEach-Object {$slots[[string]$_]})
+$previousY=-1
+foreach($name in $ordered){
+    $match=[regex]::Match($instances[$name],'posy\s*=\s*(\d+)')
+    if($match.Success){
+        $y=[int]$match.Groups[1].Value
+        if($y -lt $previousY){throw ('Navigation disagrees with screen order: '+$name)}
+        $previousY=$y
+    }
+}
+foreach($field in @('ROLE','GENDER','LOG','ENGINE','FF','LANGUAGE')){
+    $label='MENUITEM_ZK_'+$field+'_LABEL';$choice='MENUITEM_ZK_'+$field+'_CHOICE'
+    $index=[Array]::IndexOf($ordered,$label)
+    if($index -lt 0 -or $ordered[$index+1] -ne $choice){throw ('Native forwarding target is not adjacent: '+$label)}
+    if($definitions[$label].Parent -ne 'ZK_MENU_CHOICE_LABEL' -or $definitions[$choice].Parent -ne 'ZK_MENU_CHOICE'){
+        throw ('Incorrect native choice row types: '+$field)
+    }
+}
 Write-Output 'PASS: declaration order, base types, instances, menu slots, 13 control rows and 10 option bindings.'
+Write-Output 'PASS: native choice labels, six adjacent input targets and navigation matching visual order.'
 Write-Output 'Note: structural checks do not replace the Union parser or in-game acceptance.'

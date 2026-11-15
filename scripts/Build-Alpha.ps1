@@ -12,6 +12,8 @@ if(-not $MSBuildPath){
 }
 if(-not $MSBuildPath -or -not(Test-Path -LiteralPath $MSBuildPath)){throw 'MSBuild is missing. Install VS/Build Tools with MSVC v142 or specify -MSBuildPath.'}
 & (Join-Path $PSScriptRoot 'Check-UnionMenu.ps1')
+& $PythonPath (Join-Path $root 'src/OreboundCoop/tests/CheckUnionMenu.py')
+if($LASTEXITCODE -ne 0){throw 'Native menu regression failed.'}
 & (Join-Path $PSScriptRoot 'Test-ContentIdentity.ps1')
 $source=Join-Path $root 'src\OreboundCoop'
 $logs=Join-Path $root 'build\logs';New-Item -ItemType Directory -Path $logs -Force|Out-Null

@@ -757,7 +757,7 @@ void Initialize() {
     if(faultFile!=INVALID_HANDLE_VALUE)faultObserver=AddVectoredExceptionHandler(1,ObserveFault);
     LogRuntime();
     lastFrame = Now();
-    Log("Orebound Co-op 0.1.0-alpha.37 initialized; protocol=11; engine=G2NotR; no auto-connect.");
+    Log("Orebound Co-op 0.1.0-alpha.38 initialized; protocol=11; engine=G2NotR; no auto-connect.");
 }
 
 void Shutdown() {
@@ -1069,6 +1069,18 @@ void __fastcall MenuInit(zCMenu* menu,void*) {
         orebound::engine::PreviewUnionLanguage(menu);
         orebound::engine::RefreshUnionInputs(menu);
         orebound::engine::SyncRoleAddress(menu);
+        // Inspect the two reported controls after the native menu has created
+        // them; no synthetic input or mutation of other plugins' menus.
+        for(const char* field:{"FF","LANGUAGE"}){
+            const std::string prefix=std::string("MENUITEM_ZK_")+field;
+            auto* label=orebound::engine::CoopMenuItem(menu,(prefix+"_LABEL").c_str());
+            auto* choice=orebound::engine::CoopMenuItem(menu,(prefix+"_CHOICE").c_str());
+            const bool row=label&&choice&&label->GetIsSelectable()&&
+                (label->m_parItemFlags&IT_EFFECTS_NEXT)&&choice->GetType()==MENU_ITEM_CHOICEBOX;
+            orebound::engine::Log(std::string("Union choice row: ")+field+" ready="+std::to_string(row)+
+                " choices="+std::to_string(choice&&choice->GetType()==MENU_ITEM_CHOICEBOX?
+                    static_cast<zCMenuItemChoice*>(choice)->GetNumOptions():0));
+        }
     }
 }
 void __fastcall MenuDone(zCMenu* menu,void*) {

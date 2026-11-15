@@ -15,3 +15,6 @@ Optional female everyday clothing uses Union appearance selection plus an isolat
 The ambiguous close-creature matching guard remains conservative; diagnostics now include both nearest distances. A separate system-crash investigation remains unresolved. Neither successful technical tests nor this update establishes that VM crashes are fixed.
 
 Retest one-item conservation first: guest inventory +1 and shared chest −1, then reopen on both peers and ensure the host cannot take that item again. Continue with deposits, corpse actions, stack quantities, Quickloot, reconnect and save/recovery. Verify clothing from both views and open the controls menu with Sprint enabled. Do not classify a previously failed native test as passed from a static build alone.
+
+
+Follow-up, 2026-11-15: the user accepted the female body texture. Its appearance is complete and the resource remains unchanged. The settings navigation fix is tracked separately in Alpha.38.

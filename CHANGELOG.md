@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-alpha.38
+
+- Restore native Friendly fire and Language row selection and logical navigation order.
+- Validate forwarding targets and add five menu regression tests and bounded runtime diagnostics.
+- Record user acceptance of female everyday clothing, retaining its resources unchanged.
+
+
 ## 0.1.0-alpha.37 — 2026-11-14
 
 - Route direct native chest/corpse ACTION input through host-confirmed inventory recovery; block untracked client mutations and log the actual transfer path.
