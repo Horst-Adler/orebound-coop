@@ -1,5 +1,12 @@
 # Changelog
 
+## Alpha.41 — artwork revision 2 (2026-11-16)
+
+- Select three approved regional illustrations through native OldWorld, AddonWorld and DragonIsland loading textures.
+- Preserve menu/startup and generic/NewWorld textures byte-for-byte.
+- Pin approved source hashes, verify world textures and rebuild the archive-hash catalogue.
+- Keep protocol and gameplay behavior unchanged; native visual acceptance remains open.
+
 ## 0.1.0-alpha.41
 
 - Fix mover discovery through the full world tree and explicit guest dialogue handoff.

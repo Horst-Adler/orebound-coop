@@ -2,7 +2,7 @@
 
 The intended layout is an own full-screen combat image with **Orebound Co-op** centered at the top, a transparent inner main-menu background, and the original Gothic II / Night of the Raven logos and native menu entries in front. The out-of-game main menu, settings/load menus and quit confirmation share the artwork and transparent inner background. In-game pause menus retain the game view.
 
-Ninja adds two uniquely named constants to its menu parser via `Ninja/OreboundCore/Menu_G2.src`. Union validates this menu ABI 1 contract and the matching optional archive, then uses the already existing full-screen native `m_pWindow`. It removes only `m_pInnerWindow`'s background texture. It does not rewrite `MENU_MAIN`, its items, original logos, alpha, geometry, renderer state or per-frame callbacks. Original texture references are retained per native menu and restored before its ScreenDone, including nested menus. Content ABI remains 2; protocol remains 11.
+Ninja adds two uniquely named constants to its menu parser via `Ninja/OreboundCore/Menu_G2.src`. Union validates this menu ABI 1 contract and the matching optional archive, then uses the already existing full-screen native `m_pWindow`. It removes only `m_pInnerWindow`'s background texture. It does not rewrite `MENU_MAIN`, its items, original logos, alpha, geometry, renderer state or per-frame callbacks. Original texture references are retained per native menu and restored before its ScreenDone, including nested menus. Content ABI remains 2; current protocol is 14.
 
 The archive `Data/OreboundCoop_Menu.vdf` contains the uniquely named `OREBOUND_COOP_MENU-C.TEX` for menus and a deliberate `STARTSCREEN-C.TEX` override for the startup transition before menus exist. The startup entry matches the stock single-mip RGB565 format at 1024x1024; menus use opaque single-mip BC1. Colors and volume entries are independently read back. Original logo textures remain untouched.
 
@@ -30,3 +30,7 @@ Archive discovery is now validated: the alphanumeric basename `OreboundCore` mat
 Host display acceptance: the user confirmed the main menu, transparent windows, original logos, out-of-game submenus and startup transition. Native logs confirm apply/restore without the previous DXT texture-buffer error. No save was loaded for the checks; shared gameplay acceptance remains open.
 
 Alpha.41 adds native RGB565 replacements for `LOADING`, `LOADING_NEWWORLD`, `LOADING_OLDWORLD`, `LOADING_ADDONWORLD` and `LOADING_DRAGONISLAND` to the same optional matching artwork archive. The approved image, progress bars, original logos and native menu geometry are retained. Loading-picture acceptance is separate from coordinated world-transition support, which is Beta work.
+
+## Regional loading artwork
+
+Alpha.41 artwork revision 2 selects distinct approved Valley of Mines, Jharkendar and Irdorath illustrations while retaining the generic/Khorinis picture. See [world loading artwork](LOADING-ARTWORK.md) for exact resources, build inputs and acceptance limits.

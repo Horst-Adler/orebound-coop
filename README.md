@@ -49,3 +49,5 @@ Own code is AGPL-3.0-only; see [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PAR
 [Alpha.40: party rules and agreed resume](docs/ALPHA-40.md). Protocol 13; update both peers. Native gameplay acceptance remains pending.
 
 [Alpha.41: replica fixes and loading backgrounds](docs/ALPHA-41.md). Protocol 14; update both peers. New native acceptance remains pending.
+
+[World loading artwork, revision 2](docs/LOADING-ARTWORK.md): regional Minental/Jharkendar/Irdorath pictures; generic and Khorinis retain the main illustration. Matching optional artwork and Union build required; visual acceptance remains open.
